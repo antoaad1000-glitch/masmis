@@ -1,0 +1,27 @@
+{
+  "name": "masmis",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @masmis/web --filter @masmis/realtime dev",
+    "dev:web": "pnpm --filter @masmis/web dev",
+    "dev:realtime": "pnpm --filter @masmis/realtime dev",
+    "db:generate": "pnpm --filter @masmis/db prisma:generate",
+    "db:migrate": "pnpm --filter @masmis/db prisma:migrate",
+    "db:studio": "pnpm --filter @masmis/db prisma:studio",
+    "db:seed": "pnpm --filter @masmis/db seed",
+    "ai:generate": "tsx scripts/ai-generate-questions.ts",
+    "extract:pdf": "python scripts/extract-official-pdf.py",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "import:questions": "tsx scripts/import-question-bank.ts",
+    "import:questions:approve": "tsx scripts/import-question-bank.ts --approve"
+  },
+  "devDependencies": {
+    "tsx": "latest",
+    "typescript": "latest"
+  },
+  "dependencies": {
+    "@masmis/db": "workspace:^"
+  }
+}

@@ -1,0 +1,258 @@
+[
+  {
+    "questionText": "Quelle est la devise de la République française ?",
+    "answers": [
+      "Liberté, Égalité, Fraternité",
+      "Travail, Famille, Patrie",
+      "Unité, Justice, Paix",
+      "Honneur, Courage, Patrie"
+    ],
+    "correctAnswer": 1,
+    "category": "FRENCH_REPUBLIC_VALUES",
+    "difficulty": "EASY",
+    "explanation": "La devise officielle de la République française est Liberté, Égalité, Fraternité.",
+    "source": "Official naturalisation guide",
+    "sourcePage": 1,
+    "sourcePrompt": "Quelle est la devise de la République française ?"
+  },
+  {
+    "questionText": "En quelle année la loi de séparation des Églises et de l'État a-t-elle été votée ?",
+    "answers": [
+      "1789",
+      "1881",
+      "1905",
+      "1958"
+    ],
+    "correctAnswer": 3,
+    "category": "FRENCH_REPUBLIC_VALUES",
+    "difficulty": "MEDIUM",
+    "explanation": "La loi de séparation des Églises et de l'État a été votée en 1905.",
+    "source": "Official naturalisation guide",
+    "sourcePage": 1,
+    "sourcePrompt": "En quelle année la loi de séparation des Églises et de l'État a-t-elle été votée ?"
+  },
+  {
+    "questionText": "À quel âge peut-on devenir électeur en France ?",
+    "answers": [
+      "16 ans",
+      "18 ans",
+      "21 ans",
+      "25 ans"
+    ],
+    "correctAnswer": 2,
+    "category": "INSTITUTIONS_AND_POLITICS",
+    "difficulty": "EASY",
+    "explanation": "En France, il faut avoir 18 ans et remplir les conditions légales pour voter.",
+    "source": "Official naturalisation guide",
+    "sourcePage": 3,
+    "sourcePrompt": "À quel âge peut-on devenir électeur ?"
+  },
+  {
+    "questionText": "Qui vote les lois en France ?",
+    "answers": [
+      "Le Parlement",
+      "Le Conseil constitutionnel",
+      "Les préfets",
+      "Les maires"
+    ],
+    "correctAnswer": 1,
+    "category": "INSTITUTIONS_AND_POLITICS",
+    "difficulty": "EASY",
+    "explanation": "Les lois sont votées par le Parlement, composé de l'Assemblée nationale et du Sénat.",
+    "source": "Official naturalisation guide",
+    "sourcePage": 3,
+    "sourcePrompt": "Qui vote les lois ?"
+  },
+  {
+    "questionText": "Quelle est la durée du mandat du Président de la République française ?",
+    "answers": [
+      "4 ans",
+      "5 ans",
+      "6 ans",
+      "7 ans"
+    ],
+    "correctAnswer": 2,
+    "category": "INSTITUTIONS_AND_POLITICS",
+    "difficulty": "EASY",
+    "explanation": "Le mandat présidentiel français dure cinq ans : c'est le quinquennat.",
+    "source": "Official naturalisation guide",
+    "sourcePage": 3,
+    "sourcePrompt": "Quelle est la durée du mandat du Président de la République française ?"
+  },
+  {
+    "questionText": "Quels sont les trois pouvoirs concernés par la séparation des pouvoirs ?",
+    "answers": [
+      "Civil, pénal et administratif",
+      "Exécutif, législatif et judiciaire",
+      "National, régional et municipal",
+      "Présidentiel, ministériel et préfectoral"
+    ],
+    "correctAnswer": 2,
+    "category": "INSTITUTIONS_AND_POLITICS",
+    "difficulty": "MEDIUM",
+    "explanation": "La séparation des pouvoirs distingue le pouvoir exécutif, le pouvoir législatif et le pouvoir judiciaire.",
+    "source": "Official naturalisation guide",
+    "sourcePage": 3,
+    "sourcePrompt": "La séparation des pouvoirs est un principe fondamental. Quels sont les trois pouvoirs concernés ?"
+  },
+  {
+    "questionText": "Quel texte affirme que tous les hommes naissent libres et égaux en droits ?",
+    "answers": [
+      "La Déclaration des droits de l'homme et du citoyen de 1789",
+      "Le Code civil",
+      "Le traité de Maastricht",
+      "La Charte de l'environnement"
+    ],
+    "correctAnswer": 1,
+    "category": "RIGHTS_AND_DUTIES",
+    "difficulty": "EASY",
+    "explanation": "L'article 1er de la Déclaration de 1789 affirme que les hommes naissent et demeurent libres et égaux en droits.",
+    "source": "Official naturalisation guide",
+    "sourcePage": 5,
+    "sourcePrompt": "Quel texte affirme que tous les hommes naissent libres et égaux en droits ?"
+  },
+  {
+    "questionText": "Quel est l'âge de la majorité civile en France ?",
+    "answers": [
+      "16 ans",
+      "18 ans",
+      "20 ans",
+      "21 ans"
+    ],
+    "correctAnswer": 2,
+    "category": "RIGHTS_AND_DUTIES",
+    "difficulty": "EASY",
+    "explanation": "La majorité civile est fixée à 18 ans en France.",
+    "source": "Official naturalisation guide",
+    "sourcePage": 6,
+    "sourcePrompt": "Quel est l'âge de la majorité civile en France ?"
+  },
+  {
+    "questionText": "En quelle année a débuté la Révolution française ?",
+    "answers": [
+      "1715",
+      "1789",
+      "1804",
+      "1848"
+    ],
+    "correctAnswer": 2,
+    "category": "HISTORY",
+    "difficulty": "EASY",
+    "explanation": "La Révolution française commence en 1789.",
+    "source": "Official naturalisation guide",
+    "sourcePage": 7,
+    "sourcePrompt": "En quelle année a débuté la Révolution française ?"
+  },
+  {
+    "questionText": "Sous quel président la peine de mort a-t-elle été abolie en France ?",
+    "answers": [
+      "Charles de Gaulle",
+      "Georges Pompidou",
+      "Valéry Giscard d'Estaing",
+      "François Mitterrand"
+    ],
+    "correctAnswer": 4,
+    "category": "HISTORY",
+    "difficulty": "MEDIUM",
+    "explanation": "La peine de mort a été abolie en 1981 sous la présidence de François Mitterrand.",
+    "source": "Official naturalisation guide",
+    "sourcePage": 7,
+    "sourcePrompt": "Sous quel président a été abolie la peine de mort en France ?"
+  },
+  {
+    "questionText": "Quel fleuve traverse Paris ?",
+    "answers": [
+      "La Loire",
+      "La Seine",
+      "Le Rhône",
+      "La Garonne"
+    ],
+    "correctAnswer": 2,
+    "category": "GEOGRAPHY",
+    "difficulty": "EASY",
+    "explanation": "Paris est traversée par la Seine.",
+    "source": "Official naturalisation guide",
+    "sourcePage": 9,
+    "sourcePrompt": "Quel fleuve traverse Paris ?"
+  },
+  {
+    "questionText": "Quelle chaîne de montagnes est située entre la France et l'Italie ?",
+    "answers": [
+      "Les Pyrénées",
+      "Les Alpes",
+      "Le Massif central",
+      "Les Vosges"
+    ],
+    "correctAnswer": 2,
+    "category": "GEOGRAPHY",
+    "difficulty": "EASY",
+    "explanation": "Les Alpes marquent une partie de la frontière entre la France et l'Italie.",
+    "source": "Official naturalisation guide",
+    "sourcePage": 8,
+    "sourcePrompt": "Quelle chaîne de montagnes est située entre la France et l'Italie ?"
+  },
+  {
+    "questionText": "Dans quel grand musée parisien est exposée la Joconde ?",
+    "answers": [
+      "Le musée d'Orsay",
+      "Le Louvre",
+      "Le Centre Pompidou",
+      "Le musée Rodin"
+    ],
+    "correctAnswer": 2,
+    "category": "CULTURE",
+    "difficulty": "EASY",
+    "explanation": "La Joconde est exposée au musée du Louvre à Paris.",
+    "source": "Official naturalisation guide",
+    "sourcePage": 8,
+    "sourcePrompt": "Dans quel grand musée parisien est exposée la Joconde ?"
+  },
+  {
+    "questionText": "Combien d'États font partie de l'Union européenne au 1er janvier 2025 ?",
+    "answers": [
+      "24",
+      "25",
+      "27",
+      "28"
+    ],
+    "correctAnswer": 3,
+    "category": "EUROPEAN_UNION",
+    "difficulty": "MEDIUM",
+    "explanation": "L'Union européenne compte 27 États membres au 1er janvier 2025.",
+    "source": "Official naturalisation guide",
+    "sourcePage": 4,
+    "sourcePrompt": "Combien d'États font partie de l'Union européenne au 1er janvier 2025 ?"
+  },
+  {
+    "questionText": "Quel numéro d'urgence permet d'appeler la police en France ?",
+    "answers": [
+      "15",
+      "17",
+      "18",
+      "112 uniquement"
+    ],
+    "correctAnswer": 2,
+    "category": "DAILY_LIFE_IN_FRANCE",
+    "difficulty": "EASY",
+    "explanation": "Le 17 permet de joindre la police ou la gendarmerie en cas d'urgence.",
+    "source": "Official naturalisation guide",
+    "sourcePage": 10,
+    "sourcePrompt": "Quel numéro d'urgence permet d'appeler la police ?"
+  },
+  {
+    "questionText": "Quelle est la durée légale du temps de travail par semaine en France ?",
+    "answers": [
+      "32 heures",
+      "35 heures",
+      "39 heures",
+      "40 heures"
+    ],
+    "correctAnswer": 2,
+    "category": "DAILY_LIFE_IN_FRANCE",
+    "difficulty": "EASY",
+    "explanation": "La durée légale du travail à temps plein est de 35 heures par semaine.",
+    "source": "Official naturalisation guide",
+    "sourcePage": 10,
+    "sourcePrompt": "Quelle est la durée légale du temps de travail par semaine ?"
+  }
+]

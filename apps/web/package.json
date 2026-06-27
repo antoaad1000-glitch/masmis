@@ -1,0 +1,32 @@
+{
+  "name": "@masmis/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@masmis/ai": "workspace:*",
+    "@masmis/db": "workspace:*",
+    "@masmis/shared": "workspace:*",
+    "@prisma/client": "6.19.3",
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "socket.io-client": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "autoprefixer": "latest",
+    "postcss": "latest",
+    "tailwindcss": "3.4.17",
+    "typescript": "latest"
+  }
+}

@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum QuestionCategory {
+  FRENCH_REPUBLIC_VALUES
+  INSTITUTIONS_AND_POLITICS
+  RIGHTS_AND_DUTIES
+  HISTORY
+  GEOGRAPHY
+  CULTURE
+  DAILY_LIFE_IN_FRANCE
+  EUROPEAN_UNION
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum GameStatus {
+  LOBBY
+  PLAYING
+  FINISHED
+  ABANDONED
+}
+
+model Question {
+  id            String           @id @default(cuid())
+  questionText  String           @db.Text
+  answer1       String
+  answer2       String
+  answer3       String
+  answer4       String
+  correctAnswer Int
+  category      QuestionCategory
+  difficulty    Difficulty       @default(EASY)
+  explanation   String?          @db.Text
+  source        String?
+  sourcePage    Int?
+  sourcePrompt  String?          @db.Text
+  createdByAi   Boolean          @default(false)
+  approved      Boolean          @default(false)
+  canonicalHash String           @unique
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  answers       AnswerRecord[]
+
+  @@index([approved, category, difficulty])
+}
+
+model Player {
+  id        String       @id @default(cuid())
+  username  String
+  avatarUrl String?
+  createdAt DateTime     @default(now())
+  games     GamePlayer[]
+  answers   AnswerRecord[]
+}
+
+model GameSession {
+  id             String       @id @default(cuid())
+  roomCode       String       @unique
+  status         GameStatus   @default(LOBBY)
+  hostPlayerId   String?
+  timerSeconds   Int          @default(10)
+  questionCount  Int          @default(10)
+  startedAt      DateTime?
+  endedAt        DateTime?
+  createdAt      DateTime     @default(now())
+  players        GamePlayer[]
+  answers        AnswerRecord[]
+}
+
+model GamePlayer {
+  id                    String      @id @default(cuid())
+  gameSessionId         String
+  playerId              String
+  isHost                Boolean     @default(false)
+  score                 Int         @default(0)
+  correctAnswers        Int         @default(0)
+  totalAnswers          Int         @default(0)
+  averageResponseTimeMs Int         @default(0)
+  joinedAt              DateTime    @default(now())
+
+  gameSession GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  player      Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([gameSessionId, playerId])
+}
+
+model AnswerRecord {
+  id             String   @id @default(cuid())
+  gameSessionId  String
+  playerId       String
+  questionId     String
+  selectedAnswer Int
+  isCorrect      Boolean
+  responseTimeMs Int
+  pointsAwarded  Int
+  createdAt      DateTime @default(now())
+
+  gameSession GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  player      Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  question    Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([gameSessionId, playerId, questionId])
+  @@index([gameSessionId, playerId])
+}
+
+model AiGenerationJob {
+  id             String   @id @default(cuid())
+  provider       String
+  model          String
+  status         String   @default("PENDING")
+  inputSummary   String?  @db.Text
+  outputJson     Json?
+  errorMessage   String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}

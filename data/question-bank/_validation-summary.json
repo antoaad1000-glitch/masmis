@@ -1,0 +1,47 @@
+{
+  "total_files": 10,
+  "total_questions": 500,
+  "files": [
+    {
+      "file": "fr-naturalisation-batch-01.json",
+      "questions": 50
+    },
+    {
+      "file": "fr-naturalisation-batch-02.json",
+      "questions": 50
+    },
+    {
+      "file": "fr-naturalisation-batch-03.json",
+      "questions": 50
+    },
+    {
+      "file": "fr-naturalisation-batch-04.json",
+      "questions": 50
+    },
+    {
+      "file": "fr-naturalisation-batch-05.json",
+      "questions": 50
+    },
+    {
+      "file": "fr-naturalisation-batch-06.json",
+      "questions": 50
+    },
+    {
+      "file": "fr-naturalisation-batch-07.json",
+      "questions": 50
+    },
+    {
+      "file": "fr-naturalisation-batch-08.json",
+      "questions": 50
+    },
+    {
+      "file": "fr-naturalisation-batch-09.json",
+      "questions": 50
+    },
+    {
+      "file": "fr-naturalisation-batch-10.json",
+      "questions": 50
+    }
+  ],
+  "basic_validation_errors": []
+}
