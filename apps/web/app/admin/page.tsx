@@ -27,9 +27,15 @@ export default function AdminPage() {
     setAdminSecret(localStorage.getItem("masmis_admin_secret") ?? "");
   }, []);
 
-  function adminHeaders() {
-    return adminSecret ? { "x-admin-secret": adminSecret } : {};
+  function adminHeaders(): HeadersInit {
+  if (!adminSecret || adminSecret.trim() === "") {
+    return {};
   }
+
+  return {
+    "x-admin-secret": adminSecret
+  };
+}
 
   function saveSecret() {
     localStorage.setItem("masmis_admin_secret", adminSecret);
