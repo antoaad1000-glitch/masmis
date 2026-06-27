@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type Question = {
   id: string;
@@ -24,34 +24,36 @@ export default function AdminPage() {
   const [category, setCategory] = useState("");
 
   useEffect(() => {
-    setAdminSecret(localStorage.getItem("masmis_admin_secret") ?? "");
+    const savedSecret = localStorage.getItem("masmis_admin_secret") ?? "";
+    setAdminSecret(savedSecret);
   }, []);
 
-  function adminHeaders(): Record<string, string> {
+  const adminHeaders = useCallback((): Record<string, string> => {
     const headers: Record<string, string> = {};
-
     const secret = adminSecret.trim();
 
-    if (secret !== "") {
+    if (secret.length > 0) {
       headers["x-admin-secret"] = secret;
     }
 
     return headers;
-  }
+  }, [adminSecret]);
 
-  function saveSecret() {
-    localStorage.setItem("masmis_admin_secret", adminSecret);
-    load();
-  }
+  const jsonHeaders = useCallback((): Record<string, string> => {
+    return {
+      "Content-Type": "application/json",
+      ...adminHeaders(),
+    };
+  }, [adminHeaders]);
 
-  async function load() {
+  const load = useCallback(async () => {
     const params = new URLSearchParams();
 
     if (approved !== "all") {
       params.set("approved", approved);
     }
 
-    if (category) {
+    if (category.trim() !== "") {
       params.set("category", category);
     }
 
@@ -64,21 +66,28 @@ export default function AdminPage() {
       return;
     }
 
-    setQuestions(await res.json());
-  }
+    if (!res.ok) {
+      setQuestions([]);
+      return;
+    }
+
+    const data = (await res.json()) as Question[];
+    setQuestions(data);
+  }, [approved, category, adminHeaders]);
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [approved, category]);
+    void load();
+  }, [load]);
+
+  function saveSecret() {
+    localStorage.setItem("masmis_admin_secret", adminSecret);
+    void load();
+  }
 
   async function patch(id: string, body: Partial<Question>) {
     await fetch(`/api/admin/questions/${id}`, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        ...adminHeaders(),
-      },
+      headers: jsonHeaders(),
       body: JSON.stringify(body),
     });
 
@@ -125,7 +134,7 @@ export default function AdminPage() {
         <input
           value={adminSecret}
           onChange={(e) => setAdminSecret(e.target.value)}
-          placeholder="ADMIN_SECRET"
+          placeholder="ADMIN_PASSWORD"
           className="rounded-xl border px-4 py-2"
         />
 
@@ -152,7 +161,9 @@ export default function AdminPage() {
           className="rounded-xl border px-4 py-2"
         >
           <option value="">Toutes les catégories</option>
-          <option value="FRENCH_REPUBLIC_VALUES">French Republic values</option>
+          <option value="FRENCH_REPUBLIC_VALUES">
+            French Republic values
+          </option>
           <option value="INSTITUTIONS_AND_POLITICS">
             Institutions and politics
           </option>
@@ -160,7 +171,9 @@ export default function AdminPage() {
           <option value="HISTORY">History</option>
           <option value="GEOGRAPHY">Geography</option>
           <option value="CULTURE">Culture</option>
-          <option value="DAILY_LIFE_IN_FRANCE">Daily life in France</option>
+          <option value="DAILY_LIFE_IN_FRANCE">
+            Daily life in France
+          </option>
           <option value="EUROPEAN_UNION">European Union</option>
         </select>
       </div>
@@ -180,7 +193,9 @@ export default function AdminPage() {
                   <span>{q.approved ? "Approved" : "Pending"}</span>
                 </div>
 
-                <h2 className="mt-2 text-xl font-black">{q.questionText}</h2>
+                <h2 className="mt-2 text-xl font-black">
+                  {q.questionText}
+                </h2>
               </div>
 
               <div className="flex gap-2">
@@ -212,18 +227,20 @@ export default function AdminPage() {
             </div>
 
             <ol className="mt-4 grid gap-2 md:grid-cols-2">
-              {[q.answer1, q.answer2, q.answer3, q.answer4].map((a, index) => (
-                <li
-                  key={`${q.id}-${index}`}
-                  className={`rounded-xl border px-3 py-2 ${
-                    q.correctAnswer === index + 1
-                      ? "border-green-500 bg-green-50"
-                      : "border-slate-200"
-                  }`}
-                >
-                  {index + 1}. {a}
-                </li>
-              ))}
+              {[q.answer1, q.answer2, q.answer3, q.answer4].map(
+                (answer, index) => (
+                  <li
+                    key={`${q.id}-${index}`}
+                    className={`rounded-xl border px-3 py-2 ${
+                      q.correctAnswer === index + 1
+                        ? "border-green-500 bg-green-50"
+                        : "border-slate-200"
+                    }`}
+                  >
+                    {index + 1}. {answer}
+                  </li>
+                )
+              )}
             </ol>
 
             {q.explanation && (
