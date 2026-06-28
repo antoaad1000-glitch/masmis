@@ -6,7 +6,21 @@
   color-scheme: light;
 }
 
+* {
+  box-sizing: border-box;
+}
+
+html,
 body {
   min-height: 100vh;
+  max-width: 100%;
+  overflow-x: hidden;
   background: #f8fafc;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }

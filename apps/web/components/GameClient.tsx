@@ -336,11 +336,11 @@ export function GameClient() {
 
   if (!room) {
     return (
-      <main className="min-h-[100dvh] bg-gradient-to-br from-blue-50 via-white to-red-50 px-4 py-5 sm:px-6 sm:py-10">
-        <section className="mx-auto flex min-h-[calc(100dvh-2.5rem)] max-w-6xl items-center">
-          <div className="w-full overflow-hidden rounded-[2rem] bg-white shadow-xl ring-1 ring-slate-200">
-            <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
-              <div className="p-5 sm:p-8 md:p-12">
+      <main className="min-h-[100dvh] w-full max-w-full overflow-x-hidden bg-gradient-to-br from-blue-50 via-white to-red-50 px-3 py-4 sm:px-6 sm:py-10">
+        <section className="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-md min-w-0 items-center sm:max-w-6xl">
+          <div className="w-full max-w-full min-w-0 overflow-hidden rounded-[1.5rem] bg-white shadow-xl ring-1 ring-slate-200 sm:rounded-[2rem]">
+            <div className="grid min-w-0 gap-0 lg:grid-cols-[1.05fr_0.95fr]">
+              <div className="min-w-0 p-4 sm:p-8 md:p-12">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-black uppercase tracking-[0.3em] text-blue-700">Masmis</p>
                   <button
@@ -353,10 +353,10 @@ export function GameClient() {
                   </button>
                 </div>
 
-                <h1 className="mt-4 text-4xl font-black leading-tight text-slate-950 sm:text-5xl md:text-6xl">
+                <h1 className="mt-4 max-w-full text-3xl font-black leading-tight text-slate-950 min-[380px]:text-4xl sm:text-5xl md:text-6xl">
                   Quiz naturalisation française.
                 </h1>
-                <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg sm:leading-8">
+                <p className="mt-4 max-w-full text-[15px] leading-7 text-slate-600 sm:text-lg sm:leading-8">
                   Crée une salle, invite tes amis et révise avec les explications après chaque question.
                 </p>
 
@@ -371,7 +371,7 @@ export function GameClient() {
                     />
                   </label>
 
-                  <div className="rounded-3xl bg-slate-50 p-4">
+                  <div className="w-full max-w-full min-w-0 rounded-3xl bg-slate-50 p-3 sm:p-4">
                     <div className="mb-3 flex items-center gap-3">
                       <AvatarBubble avatar={avatar} size="lg" />
                       <div>
@@ -380,13 +380,13 @@ export function GameClient() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                    <div className="grid w-full min-w-0 grid-cols-3 gap-2 min-[390px]:grid-cols-4 sm:grid-cols-6">
                       {avatars.map((item) => (
                         <button
                           type="button"
                           key={item}
                           onClick={() => setAvatar(item)}
-                          className={`min-h-12 rounded-2xl border text-2xl transition active:scale-95 ${
+                          className={`min-h-12 min-w-0 rounded-2xl border text-xl transition active:scale-95 sm:text-2xl ${
                             avatar === item ? "border-blue-700 bg-blue-50 shadow-md" : "border-slate-200 bg-white"
                           }`}
                         >
@@ -403,7 +403,7 @@ export function GameClient() {
                 </div>
               </div>
 
-              <div className="bg-slate-950 p-5 text-white sm:p-8 md:p-10">
+              <div className="min-w-0 bg-slate-950 p-4 text-white sm:p-8 md:p-10">
                 <div className="rounded-[1.75rem] bg-white/10 p-4 ring-1 ring-white/10 sm:p-5">
                   <h2 className="text-2xl font-black">Jouer maintenant</h2>
                   <p className="mt-2 text-sm leading-6 text-slate-300">
@@ -419,7 +419,7 @@ export function GameClient() {
                       Créer une salle
                     </button>
 
-                    <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                    <div className="grid min-w-0 gap-3 sm:grid-cols-[1fr_auto]">
                       <input
                         className="h-14 rounded-2xl border border-white/10 bg-white px-4 text-center text-xl font-black uppercase tracking-[0.25em] text-slate-950 outline-none"
                         placeholder="CODE"
@@ -440,7 +440,7 @@ export function GameClient() {
                   {error && <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
                 </div>
 
-                <div className="mt-5 grid grid-cols-3 gap-3 text-center">
+                <div className="mt-5 grid min-w-0 grid-cols-3 gap-2 text-center sm:gap-3">
                   <div className="rounded-2xl bg-white/10 p-3">
                     <p className="text-2xl font-black">8</p>
                     <p className="text-xs text-slate-300">joueurs</p>
@@ -464,8 +464,8 @@ export function GameClient() {
 
   if (room.status === "finished") {
     return (
-      <main className="min-h-[100dvh] bg-gradient-to-br from-blue-50 via-white to-slate-100 px-4 py-5 sm:px-6 sm:py-10">
-        <section className="mx-auto max-w-5xl">
+      <main className="min-h-[100dvh] w-full max-w-full overflow-x-hidden bg-gradient-to-br from-blue-50 via-white to-slate-100 px-3 py-4 sm:px-6 sm:py-10">
+        <section className="mx-auto w-full max-w-5xl min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-sm font-black uppercase tracking-[0.3em] text-blue-700">Résultats</p>
@@ -583,8 +583,8 @@ export function GameClient() {
 
   if (question) {
     return (
-      <main className="min-h-[100dvh] bg-gradient-to-br from-blue-50 via-white to-slate-100 px-4 py-5 sm:px-6 sm:py-8">
-        <section className="mx-auto max-w-6xl">
+      <main className="min-h-[100dvh] w-full max-w-full overflow-x-hidden bg-gradient-to-br from-blue-50 via-white to-slate-100 px-3 py-4 sm:px-6 sm:py-8">
+        <section className="mx-auto w-full max-w-6xl min-w-0">
           <div className="mb-4 flex items-center justify-between gap-3 rounded-3xl bg-white p-3 shadow-sm ring-1 ring-slate-200 sm:p-4">
             <div className="min-w-0">
               <p className="text-xs font-black uppercase tracking-widest text-blue-700">Salle {room.roomCode}</p>
@@ -603,8 +603,8 @@ export function GameClient() {
             </div>
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
-            <section className="rounded-[2rem] bg-white p-4 shadow-xl ring-1 ring-slate-200 sm:p-6 md:p-8">
+          <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <section className="min-w-0 rounded-[1.5rem] bg-white p-4 shadow-xl ring-1 ring-slate-200 sm:rounded-[2rem] sm:p-6 md:p-8">
               <div className="h-3 overflow-hidden rounded-full bg-slate-100">
                 <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${progressPercent}%` }} />
               </div>
@@ -614,7 +614,7 @@ export function GameClient() {
                 <span className="rounded-full bg-slate-100 px-3 py-1">{question.difficulty}</span>
               </div>
 
-              <h1 className="mt-4 text-2xl font-black leading-tight text-slate-950 sm:text-3xl md:text-4xl">{question.questionText}</h1>
+              <h1 className="mt-4 break-words text-2xl font-black leading-tight text-slate-950 sm:text-3xl md:text-4xl">{question.questionText}</h1>
 
               {feedbackStatus !== "revealed" && (
                 <div className="mt-4 rounded-2xl bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800">
@@ -661,7 +661,7 @@ export function GameClient() {
                           {answerLetter(answerNumber)}
                         </span>
 
-                        <span className="flex-1 text-base sm:text-lg">{answer}</span>
+                        <span className="min-w-0 flex-1 break-words text-base sm:text-lg">{answer}</span>
 
                         {isSelected && feedbackStatus !== "revealed" && <span className="text-2xl">✍️</span>}
                         {selectedWasCorrect && <span className="text-2xl">✅</span>}
@@ -700,7 +700,7 @@ export function GameClient() {
               {error && <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 font-semibold text-red-700">{error}</p>}
             </section>
 
-            <aside className="rounded-[2rem] bg-slate-950 p-4 text-white shadow-xl sm:p-5">
+            <aside className="min-w-0 rounded-[1.5rem] bg-slate-950 p-4 text-white shadow-xl sm:rounded-[2rem] sm:p-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-black uppercase tracking-widest text-blue-300">Joueurs</p>
@@ -742,8 +742,8 @@ export function GameClient() {
   }
 
   return (
-    <main className="min-h-[100dvh] bg-gradient-to-br from-blue-50 via-white to-slate-100 px-4 py-5 sm:px-6 sm:py-10">
-      <section className="mx-auto max-w-5xl">
+    <main className="min-h-[100dvh] w-full max-w-full overflow-x-hidden bg-gradient-to-br from-blue-50 via-white to-slate-100 px-3 py-4 sm:px-6 sm:py-10">
+      <section className="mx-auto w-full max-w-5xl min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-sm font-black uppercase tracking-[0.3em] text-blue-700">Lobby</p>
