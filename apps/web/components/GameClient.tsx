@@ -403,8 +403,8 @@ export function GameClient() {
                 </div>
               </div>
 
-              <div className="min-w-0 bg-slate-950 p-4 text-white sm:p-8 md:p-10">
-                <div className="rounded-[1.75rem] bg-white/10 p-4 ring-1 ring-white/10 sm:p-5">
+              <div className="min-w-0 overflow-hidden bg-slate-950 p-4 text-white sm:p-8 md:p-10">
+                <div className="min-w-0 overflow-hidden rounded-[1.75rem] bg-white/10 p-4 ring-1 ring-white/10 sm:p-5">
                   <h2 className="text-2xl font-black">Jouer maintenant</h2>
                   <p className="mt-2 text-sm leading-6 text-slate-300">
                     Sur téléphone, les boutons sont grands et tu peux changer ta réponse jusqu'à la fin du timer.
@@ -419,9 +419,9 @@ export function GameClient() {
                       Créer une salle
                     </button>
 
-                    <div className="grid min-w-0 gap-3 sm:grid-cols-[1fr_auto]">
+                    <div className="grid w-full min-w-0 max-w-full gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                       <input
-                        className="h-14 rounded-2xl border border-white/10 bg-white px-4 text-center text-xl font-black uppercase tracking-[0.25em] text-slate-950 outline-none"
+                        className="block h-14 w-full min-w-0 max-w-full rounded-2xl border border-white/10 bg-white px-3 text-center text-lg font-black uppercase tracking-[0.18em] text-slate-950 outline-none sm:px-4 sm:text-xl sm:tracking-[0.25em]"
                         placeholder="CODE"
                         value={roomCodeInput}
                         maxLength={6}
@@ -430,7 +430,7 @@ export function GameClient() {
                       <button
                         type="button"
                         onClick={joinRoom}
-                        className="h-14 rounded-2xl bg-white px-5 text-lg font-black text-slate-950 transition active:scale-[0.98]"
+                        className="h-14 w-full min-w-0 max-w-full rounded-2xl bg-white px-5 text-lg font-black text-slate-950 transition active:scale-[0.98] sm:w-auto"
                       >
                         Rejoindre
                       </button>
