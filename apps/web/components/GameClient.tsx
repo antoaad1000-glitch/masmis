@@ -83,6 +83,70 @@ function answerLetter(index: number) {
   return ["A", "B", "C", "D"][index - 1] ?? String(index);
 }
 
+
+function normalizeExplanationText(text: string) {
+  return text
+    .replace(/\\n/g, "\n")
+    .replace(/\r\n/g, "\n")
+    .trim();
+}
+
+function splitExplanationParagraphs(text: string) {
+  const normalized = normalizeExplanationText(text);
+
+  return normalized
+    .split(/\n{2,}|(?=À retenir\s*:)|(?=La bonne réponse est\s*:)/gi)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+}
+
+function renderInlineFormatting(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={index}>{part.slice(2, -2)}</strong>;
+    }
+
+    return <span key={index}>{part}</span>;
+  });
+}
+
+function ExplanationParagraph({ paragraph }: { paragraph: string }) {
+  const answerMatch = paragraph.match(/^(La bonne réponse est\s*:)([\s\S]*)$/i);
+  const rememberMatch = paragraph.match(/^(À retenir\s*:)([\s\S]*)$/i);
+
+  if (answerMatch) {
+    return (
+      <p className="text-slate-800">
+        <strong className="font-black text-slate-950">{answerMatch[1]}</strong>
+        {renderInlineFormatting(answerMatch[2])}
+      </p>
+    );
+  }
+
+  if (rememberMatch) {
+    return (
+      <p className="rounded-2xl bg-white/70 p-3 text-slate-800 ring-1 ring-slate-200">
+        <strong className="font-black text-blue-800">{rememberMatch[1]}</strong>
+        {renderInlineFormatting(rememberMatch[2])}
+      </p>
+    );
+  }
+
+  return <p className="text-slate-700">{renderInlineFormatting(paragraph)}</p>;
+}
+
+function ExplanationBlock({ text }: { text: string }) {
+  const paragraphs = splitExplanationParagraphs(text);
+
+  return (
+    <div className="mt-3 space-y-3 text-[15px] leading-7 sm:text-base">
+      {paragraphs.map((paragraph, index) => (
+        <ExplanationParagraph key={`${index}-${paragraph.slice(0, 20)}`} paragraph={paragraph} />
+      ))}
+    </div>
+  );
+}
+
 function normalizeRoomCode(value: string | null | undefined) {
   return (value ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
 }
@@ -864,8 +928,8 @@ Code : ${code}`;
 
                     {item.explanation && (
                       <div className="mt-4 rounded-2xl bg-blue-50 p-4">
-                        <p className="text-xs font-black uppercase tracking-widest text-blue-700">Explication</p>
-                        <p className="mt-2 leading-7 text-slate-700">{item.explanation}</p>
+                        <p className="text-xs font-black uppercase tracking-widest text-blue-700">Correction détaillée</p>
+                        <ExplanationBlock text={item.explanation} />
                       </div>
                     )}
                   </article>
@@ -989,8 +1053,8 @@ Code : ${code}`;
 
               {explanation && feedbackStatus === "revealed" && (
                 <div className="mt-5 rounded-3xl bg-slate-100 p-5">
-                  <p className="text-sm font-black uppercase tracking-widest text-slate-500">Explication</p>
-                  <p className="mt-2 leading-7 text-slate-700">{explanation}</p>
+                  <p className="text-sm font-black uppercase tracking-widest text-slate-500">Correction détaillée</p>
+                  <ExplanationBlock text={explanation} />
                 </div>
               )}
 
