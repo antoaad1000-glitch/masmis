@@ -83,6 +83,10 @@ function answerLetter(index: number) {
   return ["A", "B", "C", "D"][index - 1] ?? String(index);
 }
 
+function normalizeRoomCode(value: string | null) {
+  return (value ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+}
+
 export function GameClient() {
   const socket = useMemo(() => getSocket(), []);
 
@@ -106,6 +110,8 @@ export function GameClient() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showReview, setShowReview] = useState(false);
   const [shareStatus, setShareStatus] = useState<string | null>(null);
+  const [invitedRoomCode, setInvitedRoomCode] = useState<string | null>(null);
+  const [canAutoJoinInvitation, setCanAutoJoinInvitation] = useState(false);
 
   const me = room?.players.find((p) => p.id === playerId);
   const isHost = Boolean(me?.isHost);
@@ -161,6 +167,24 @@ export function GameClient() {
   useEffect(() => {
     const savedSound = localStorage.getItem("masmis_sound_enabled");
     if (savedSound === "false") setSoundEnabled(false);
+
+    const savedUsername = localStorage.getItem("masmis_username") ?? "";
+    const savedAvatar = localStorage.getItem("masmis_avatar") ?? "";
+
+    if (savedUsername.trim()) setUsername(savedUsername);
+    if (savedAvatar) setAvatar(savedAvatar);
+
+    const params = new URLSearchParams(window.location.search);
+    const roomFromLink = normalizeRoomCode(params.get("room") ?? params.get("code"));
+
+    if (roomFromLink) {
+      setInvitedRoomCode(roomFromLink);
+      setRoomCodeInput(roomFromLink);
+
+      if (savedUsername.trim()) {
+        setCanAutoJoinInvitation(true);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -214,6 +238,27 @@ export function GameClient() {
   }, [socket, playerId, playSound]);
 
   useEffect(() => {
+    if (!canAutoJoinInvitation || !invitedRoomCode || room || playerId || !username.trim()) return;
+
+    setCanAutoJoinInvitation(false);
+    setError(`Connexion à la salle ${invitedRoomCode}...`);
+
+    socket.emit("room:join", { roomCode: invitedRoomCode, username, avatarUrl: avatar }, (res: SocketResponse) => {
+      if (!res.ok) {
+        setError(res.error ?? "Impossible de rejoindre la salle.");
+        return;
+      }
+
+      saveProfile();
+      clearInvitationFromUrl();
+      setPlayerId(res.playerId ?? null);
+      setRoom(res.room ?? null);
+      setShowReview(false);
+      setError(null);
+    });
+  }, [avatar, canAutoJoinInvitation, invitedRoomCode, playerId, room, socket, username]);
+
+  useEffect(() => {
     if (!question || !questionStartedAt || feedbackStatus === "revealed") return;
 
     const interval = window.setInterval(() => {
@@ -234,11 +279,30 @@ export function GameClient() {
     return true;
   }
 
+  function saveProfile() {
+    localStorage.setItem("masmis_username", username.trim());
+    localStorage.setItem("masmis_avatar", avatar);
+  }
+
+  function clearInvitationFromUrl() {
+    if (typeof window === "undefined") return;
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete("room");
+    url.searchParams.delete("code");
+
+    const nextUrl = `${url.pathname}${url.search}${url.hash}` || "/";
+    window.history.replaceState({}, "", nextUrl);
+  }
+
   function createRoom() {
     if (!ensureUsername()) return;
 
-    socket.emit("room:create", { username, avatarUrl: avatar }, (res: SocketResponse) => {
+    socket.emit("room:create", { username: username.trim(), avatarUrl: avatar }, (res: SocketResponse) => {
       if (!res.ok) return setError(res.error ?? "Impossible de créer la salle.");
+      saveProfile();
+      clearInvitationFromUrl();
+      setInvitedRoomCode(null);
       setPlayerId(res.playerId ?? null);
       setRoom(res.room ?? null);
       setShowReview(false);
@@ -248,11 +312,21 @@ export function GameClient() {
   function joinRoom() {
     if (!ensureUsername()) return;
 
-    socket.emit("room:join", { roomCode: roomCodeInput, username, avatarUrl: avatar }, (res: SocketResponse) => {
+    const roomCode = normalizeRoomCode(roomCodeInput || invitedRoomCode);
+
+    if (!roomCode) {
+      setError("Entre un code de salle.");
+      return;
+    }
+
+    socket.emit("room:join", { roomCode, username: username.trim(), avatarUrl: avatar }, (res: SocketResponse) => {
       if (!res.ok) return setError(res.error ?? "Impossible de rejoindre la salle.");
+      saveProfile();
+      clearInvitationFromUrl();
       setPlayerId(res.playerId ?? null);
       setRoom(res.room ?? null);
       setShowReview(false);
+      setError(null);
     });
   }
 
@@ -293,6 +367,8 @@ export function GameClient() {
     setQuestion(null);
     setPlayerId(null);
     setRoomCodeInput("");
+    setInvitedRoomCode(null);
+    clearInvitationFromUrl();
     setAnswerResult(null);
     setFeedbackStatus("idle");
     setCorrectAnswer(null);
@@ -306,9 +382,18 @@ export function GameClient() {
     setSoundEnabled((value) => !value);
   }
 
-  function invitationText() {
+  function invitationUrl() {
     const appUrl = typeof window !== "undefined" ? window.location.origin : "https://masmis.xyz";
-    return `Rejoins ma partie Masmis : ${room?.roomCode ?? ""} ${appUrl}`;
+    const code = room?.roomCode ?? "";
+    return `${appUrl}/?room=${encodeURIComponent(code)}`;
+  }
+
+  function invitationText() {
+    const code = room?.roomCode ?? "";
+    return `Rejoins ma partie Masmis :
+${invitationUrl()}
+
+Code : ${code}`;
   }
 
   async function copyRoomCode() {
@@ -328,11 +413,11 @@ export function GameClient() {
     if (!room?.roomCode) return;
 
     const text = invitationText();
-    const appUrl = typeof window !== "undefined" ? window.location.origin : "https://masmis.xyz";
+    const url = invitationUrl();
 
     if (navigator.share) {
       try {
-        await navigator.share({ title: "Masmis", text, url: appUrl });
+        await navigator.share({ title: "Masmis", text: "Rejoins ma partie Masmis", url });
         return;
       } catch {
         // User cancelled or sharing failed. Fall back to copy.
@@ -447,8 +532,17 @@ export function GameClient() {
                   Quiz naturalisation française.
                 </h1>
                 <p className="mt-4 max-w-full text-[15px] leading-7 text-slate-600 sm:text-lg sm:leading-8">
-                  Crée une salle, invite tes amis et révise avec les explications après chaque question.
+                  {invitedRoomCode
+                    ? `Choisis ton nom pour rejoindre automatiquement la salle ${invitedRoomCode}.`
+                    : "Crée une salle, invite tes amis et révise avec les explications après chaque question."}
                 </p>
+
+                {invitedRoomCode && (
+                  <div className="mt-5 rounded-3xl bg-blue-50 p-4 ring-1 ring-blue-100">
+                    <p className="text-xs font-black uppercase tracking-widest text-blue-700">Invitation reçue</p>
+                    <p className="mt-1 text-sm font-bold text-slate-700">Salle <span className="font-black text-blue-700">{invitedRoomCode}</span> prête à rejoindre.</p>
+                  </div>
+                )}
 
                 <div className="mt-7 grid gap-4">
                   <label className="grid gap-2 text-sm font-black text-slate-700">
@@ -515,14 +609,14 @@ export function GameClient() {
                         placeholder="CODE"
                         value={roomCodeInput}
                         maxLength={6}
-                        onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
+                        onChange={(e) => setRoomCodeInput(normalizeRoomCode(e.target.value))}
                       />
                       <button
                         type="button"
                         onClick={joinRoom}
                         className="h-14 w-full min-w-0 max-w-full rounded-2xl bg-white px-5 text-lg font-black text-slate-950 transition active:scale-[0.98] sm:w-auto"
                       >
-                        Rejoindre
+                        {invitedRoomCode ? `Rejoindre ${invitedRoomCode}` : "Rejoindre"}
                       </button>
                     </div>
                   </div>
