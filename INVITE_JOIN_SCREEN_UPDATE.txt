@@ -1,0 +1,24 @@
+Masmis update: invite-only join screen
+
+When a player opens https://www.masmis.xyz/?room=CODE, the app now shows a simplified invite screen:
+- Invitation reçue
+- Room code
+- Name input
+- Avatar selection
+- Rejoindre la salle
+- Retour à l'accueil
+
+The normal home screen with "Créer une salle" is hidden while the invite link is active.
+
+Deploy commands:
+pnpm install --no-frozen-lockfile
+pnpm --filter @masmis/web build
+git add .
+git commit -m "Simplify invite join screen"
+git push origin main
+
+Vercel install command should remain:
+cd ../.. && pnpm install --no-frozen-lockfile
+
+Vercel build command should remain:
+cd ../.. && pnpm --filter @masmis/db prisma:generate && pnpm --filter @masmis/web build
