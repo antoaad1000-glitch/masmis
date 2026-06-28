@@ -110,6 +110,7 @@ async function main() {
   const { prisma, QuestionCategory, Difficulty } = await import("@masmis/db");
 
   const approveAll = process.argv.includes("--approve");
+  const updateExisting = process.argv.includes("--update-existing");
   const folderPath = path.resolve(process.cwd(), "data/question-bank");
 
   const files = (await fs.readdir(folderPath))
@@ -143,6 +144,7 @@ async function main() {
   let read = 0;
   let inserted = 0;
   let skipped = 0;
+  let updated = 0;
 
   const seenInThisImport = new Set<string>();
 
@@ -176,6 +178,29 @@ async function main() {
       });
 
       if (existing) {
+        if (updateExisting) {
+          await prisma.question.update({
+            where: { canonicalHash: hash },
+            data: {
+              answer1: q.answers[0],
+              answer2: q.answers[1],
+              answer3: q.answers[2],
+              answer4: q.answers[3],
+              correctAnswer: q.correctAnswer,
+              category: categoryMap[q.category] ?? QuestionCategory.FRENCH_REPUBLIC_VALUES,
+              difficulty: difficultyMap[q.difficulty] ?? Difficulty.EASY,
+              explanation: q.explanation,
+              source: q.source,
+              sourcePrompt: q.sourcePrompt,
+              approved: approveAll ? true : existing.approved
+            }
+          });
+
+          updated++;
+          console.log(`Updated existing database question: ${q.questionText}`);
+          continue;
+        }
+
         skipped++;
         console.log(`Skipped existing database question: ${q.questionText}`);
         continue;
@@ -211,6 +236,7 @@ async function main() {
   console.log("\nImport finished.");
   console.log(`Read: ${read}`);
   console.log(`Inserted: ${inserted}`);
+  console.log(`Updated: ${updated}`);
   console.log(`Skipped duplicates: ${skipped}`);
   console.log(`Total in database: ${total}`);
   console.log(`Approved: ${approved}`);

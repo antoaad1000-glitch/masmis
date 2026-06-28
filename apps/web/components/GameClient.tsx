@@ -105,6 +105,7 @@ export function GameClient() {
   const [questionStartedAt, setQuestionStartedAt] = useState<number | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showReview, setShowReview] = useState(false);
+  const [shareStatus, setShareStatus] = useState<string | null>(null);
 
   const me = room?.players.find((p) => p.id === playerId);
   const isHost = Boolean(me?.isHost);
@@ -305,7 +306,95 @@ export function GameClient() {
     setSoundEnabled((value) => !value);
   }
 
-  function handleAvatarUpload(event: ChangeEvent<HTMLInputElement>) {
+  function invitationText() {
+    const appUrl = typeof window !== "undefined" ? window.location.origin : "https://masmis.xyz";
+    return `Rejoins ma partie Masmis : ${room?.roomCode ?? ""} ${appUrl}`;
+  }
+
+  async function copyRoomCode() {
+    if (!room?.roomCode) return;
+
+    try {
+      await navigator.clipboard.writeText(room.roomCode);
+      setShareStatus("Code copié");
+    } catch {
+      setShareStatus("Code : " + room.roomCode);
+    }
+
+    window.setTimeout(() => setShareStatus(null), 1800);
+  }
+
+  async function shareRoom() {
+    if (!room?.roomCode) return;
+
+    const text = invitationText();
+    const appUrl = typeof window !== "undefined" ? window.location.origin : "https://masmis.xyz";
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Masmis", text, url: appUrl });
+        return;
+      } catch {
+        // User cancelled or sharing failed. Fall back to copy.
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setShareStatus("Invitation copiée");
+    } catch {
+      setShareStatus("Partage le code : " + room.roomCode);
+    }
+
+    window.setTimeout(() => setShareStatus(null), 1800);
+  }
+
+  function readFileAsDataUrl(file: File) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") resolve(reader.result);
+        else reject(new Error("Image illisible."));
+      };
+      reader.onerror = () => reject(new Error("Image illisible."));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function loadImage(src: string) {
+    return new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("Image illisible."));
+      image.src = src;
+    });
+  }
+
+  async function compressAvatar(file: File) {
+    const dataUrl = await readFileAsDataUrl(file);
+    const image = await loadImage(dataUrl);
+    const maxSide = 360;
+    const ratio = Math.min(1, maxSide / Math.max(image.width, image.height));
+    const width = Math.max(1, Math.round(image.width * ratio));
+    const height = Math.max(1, Math.round(image.height * ratio));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Compression impossible.");
+
+    context.drawImage(image, 0, 0, width, height);
+
+    for (const quality of [0.82, 0.72, 0.62, 0.52]) {
+      const compressed = canvas.toDataURL("image/jpeg", quality);
+      if (compressed.length < 600_000) return compressed;
+    }
+
+    return canvas.toDataURL("image/jpeg", 0.45);
+  }
+
+  async function handleAvatarUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -314,19 +403,20 @@ export function GameClient() {
       return;
     }
 
-    if (file.size > 600_000) {
-      setError("Image trop lourde. Utilise une image de moins de 600 Ko pour le mode local.");
+    if (file.size > 12_000_000) {
+      setError("Photo trop lourde. Choisis une photo de moins de 12 Mo.");
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setAvatar(reader.result);
-        setError(null);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressAvatar(file);
+      setAvatar(compressed);
+      setError(null);
+    } catch {
+      setError("Impossible d'utiliser cette photo. Essaie une autre image.");
+    } finally {
+      event.target.value = "";
+    }
   }
 
   const sortedPlayers = room?.players.slice().sort((a, b) => b.score - a.score) ?? [];
@@ -376,7 +466,7 @@ export function GameClient() {
                       <AvatarBubble avatar={avatar} size="lg" />
                       <div>
                         <p className="text-sm font-black uppercase tracking-widest text-slate-500">Avatar</p>
-                        <p className="text-sm text-slate-600">Emoji ou photo légère.</p>
+                        <p className="text-sm text-slate-600">Emoji ou selfie compressé automatiquement.</p>
                       </div>
                     </div>
 
@@ -396,7 +486,7 @@ export function GameClient() {
                     </div>
 
                     <label className="mt-3 block cursor-pointer rounded-2xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-center text-sm font-black text-blue-700">
-                      Importer une photo
+                      Importer une photo / selfie
                       <input className="hidden" type="file" accept="image/*" onChange={handleAvatarUpload} />
                     </label>
                   </div>
@@ -443,15 +533,15 @@ export function GameClient() {
                 <div className="mt-5 grid min-w-0 grid-cols-3 gap-2 text-center sm:gap-3">
                   <div className="rounded-2xl bg-white/10 p-3">
                     <p className="text-2xl font-black">8</p>
-                    <p className="text-xs text-slate-300">joueurs</p>
+                    <p className="text-xs text-slate-300">max joueurs</p>
                   </div>
                   <div className="rounded-2xl bg-white/10 p-3">
-                    <p className="text-2xl font-black">500</p>
-                    <p className="text-xs text-slate-300">questions</p>
+                    <p className="text-2xl font-black">↔</p>
+                    <p className="text-xs text-slate-300">réponse modifiable</p>
                   </div>
                   <div className="rounded-2xl bg-white/10 p-3">
-                    <p className="text-2xl font-black">B1</p>
-                    <p className="text-xs text-slate-300">civique</p>
+                    <p className="text-2xl font-black">💡</p>
+                    <p className="text-xs text-slate-300">explications</p>
                   </div>
                 </div>
               </div>
@@ -511,9 +601,6 @@ export function GameClient() {
             <div className="mt-6 space-y-4">
               {(room.review ?? []).map((item, index) => {
                 const mine = item.playerResults.find((result) => result.playerId === playerId);
-                const myAnswerText = mine?.selectedAnswer ? item.answers[mine.selectedAnswer - 1] : "Aucune réponse";
-                const correctAnswerText = item.answers[item.correctAnswer - 1];
-
                 return (
                   <article key={item.questionId} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -552,17 +639,6 @@ export function GameClient() {
                           </div>
                         );
                       })}
-                    </div>
-
-                    <div className="mt-4 grid gap-2 rounded-2xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
-                      <p>
-                        <span className="font-black text-slate-600">Ta réponse : </span>
-                        {myAnswerText}
-                      </p>
-                      <p>
-                        <span className="font-black text-slate-600">Bonne réponse : </span>
-                        {correctAnswerText}
-                      </p>
                     </div>
 
                     {item.explanation && (
@@ -759,9 +835,39 @@ export function GameClient() {
         </div>
 
         <div className="mt-6 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-          <p className="text-sm font-black uppercase tracking-widest text-slate-500">Code d'invitation</p>
-          <p className="mt-2 select-all text-center text-5xl font-black tracking-[0.2em] text-blue-700 sm:text-left">{room.roomCode}</p>
-          <p className="mt-2 text-sm text-slate-500">Partage ce code aux autres joueurs.</p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-black uppercase tracking-widest text-slate-500">Code d'invitation</p>
+              <p className="mt-1 text-sm text-slate-500">Clique le code pour le copier, ou partage directement l'invitation.</p>
+            </div>
+            {shareStatus && <span className="rounded-full bg-green-50 px-3 py-1 text-sm font-black text-green-700">{shareStatus}</span>}
+          </div>
+
+          <button
+            type="button"
+            onClick={copyRoomCode}
+            className="mt-4 w-full rounded-3xl bg-blue-50 px-4 py-5 text-center text-5xl font-black tracking-[0.16em] text-blue-700 ring-1 ring-blue-100 transition active:scale-[0.99] sm:text-left"
+            aria-label="Copier le code d'invitation"
+          >
+            {room.roomCode}
+          </button>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={copyRoomCode}
+              className="min-h-12 rounded-2xl bg-slate-950 px-4 py-3 font-black text-white transition active:scale-[0.98]"
+            >
+              Copier le code
+            </button>
+            <button
+              type="button"
+              onClick={shareRoom}
+              className="min-h-12 rounded-2xl bg-blue-700 px-4 py-3 font-black text-white transition active:scale-[0.98]"
+            >
+              Partager l'invitation
+            </button>
+          </div>
         </div>
 
         <div className="mt-6 grid gap-3">

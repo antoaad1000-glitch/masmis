@@ -132,3 +132,21 @@ git add .
 git commit -m "Improve mobile UI and gameplay review"
 git push origin main
 ```
+
+## Latest polish update
+
+This version includes:
+
+- Cleaner final review: answers are shown only by highlights (green correct answer, red wrong selected answer) without repeating “ta réponse / bonne réponse”.
+- Better mobile welcome information: max players, changeable answers, and explanations instead of internal dataset stats.
+- Avatar upload now compresses phone photos automatically instead of rejecting normal selfies over 600 KB.
+- Lobby invitation tools: tap the room code to copy it, use “Copier le code”, or use “Partager l'invitation” on mobile.
+- Enriched explanations in `data/question-bank` for the 500-question bank.
+
+If your database already contains the old explanations, update it with:
+
+```bash
+pnpm import:questions:update
+```
+
+This updates existing questions by their canonical hash and keeps them approved.

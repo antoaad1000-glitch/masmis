@@ -15,7 +15,8 @@
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "import:questions": "tsx scripts/import-question-bank.ts",
-    "import:questions:approve": "tsx scripts/import-question-bank.ts --approve"
+    "import:questions:approve": "tsx scripts/import-question-bank.ts --approve",
+    "import:questions:update": "tsx scripts/import-question-bank.ts --approve --update-existing"
   },
   "devDependencies": {
     "tsx": "latest",
