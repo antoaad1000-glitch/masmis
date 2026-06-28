@@ -383,9 +383,11 @@ export function GameClient() {
   }
 
   function invitationUrl() {
-    const appUrl = typeof window !== "undefined" ? window.location.origin : "https://masmis.xyz";
     const code = room?.roomCode ?? "";
-    return `${appUrl}/?room=${encodeURIComponent(code)}`;
+    const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://masmis.xyz";
+    const url = new URL(baseUrl);
+    url.searchParams.set("room", code);
+    return url.toString();
   }
 
   function invitationText() {
@@ -413,11 +415,12 @@ Code : ${code}`;
     if (!room?.roomCode) return;
 
     const text = invitationText();
-    const url = invitationUrl();
 
     if (navigator.share) {
       try {
-        await navigator.share({ title: "Masmis", text: "Rejoins ma partie Masmis", url });
+        // Keep the full invitation in `text` only. Some apps duplicate or strip
+        // query parameters when `url` is provided separately.
+        await navigator.share({ title: "Masmis", text });
         return;
       } catch {
         // User cancelled or sharing failed. Fall back to copy.
