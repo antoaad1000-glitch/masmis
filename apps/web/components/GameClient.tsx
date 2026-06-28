@@ -40,18 +40,42 @@ type SoundKind = "select" | "correct" | "wrong";
 const avatars = ["🇫🇷", "🗼", "🐓", "📚", "⚖️", "🎨", "🏛️", "🥐", "🧠", "⭐", "🚀", "🦊"];
 
 function isImageAvatar(avatar?: string | null) {
-  return Boolean(avatar && (avatar.startsWith("data:image/") || avatar.startsWith("http://") || avatar.startsWith("https://")));
+  return Boolean(
+    avatar &&
+      (avatar.startsWith("data:image/") ||
+        avatar.startsWith("http://") ||
+        avatar.startsWith("https://"))
+  );
 }
 
-function AvatarBubble({ avatar, size = "md" }: { avatar?: string | null; size?: "sm" | "md" | "lg" }) {
-  const sizeClass = size === "lg" ? "h-16 w-16 text-4xl" : size === "sm" ? "h-10 w-10 text-xl" : "h-12 w-12 text-2xl";
+function AvatarBubble({
+  avatar,
+  size = "md"
+}: {
+  avatar?: string | null;
+  size?: "sm" | "md" | "lg";
+}) {
+  const sizeClass =
+    size === "lg"
+      ? "h-16 w-16 text-4xl"
+      : size === "sm"
+        ? "h-10 w-10 text-xl"
+        : "h-12 w-12 text-2xl";
 
   if (isImageAvatar(avatar)) {
-    return <img src={avatar ?? ""} alt="Avatar" className={`${sizeClass} shrink-0 rounded-2xl object-cover ring-2 ring-white/70`} />;
+    return (
+      <img
+        src={avatar ?? ""}
+        alt="Avatar"
+        className={`${sizeClass} shrink-0 rounded-2xl object-cover ring-2 ring-white/70`}
+      />
+    );
   }
 
   return (
-    <span className={`${sizeClass} flex shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-200`}>
+    <span
+      className={`${sizeClass} flex shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-200`}
+    >
       {avatar || "🙂"}
     </span>
   );
@@ -64,7 +88,11 @@ function statusLabel(status?: AnswerStatus, points?: number) {
     case "locked":
       return { text: "Répondu", icon: "✍️", className: "bg-blue-100 text-blue-800" };
     case "correct":
-      return { text: `Correct +${points ?? 0}`, icon: "✅", className: "bg-green-100 text-green-800" };
+      return {
+        text: `Correct +${points ?? 0}`,
+        icon: "✅",
+        className: "bg-green-100 text-green-800"
+      };
     case "wrong":
       return { text: "Faux", icon: "❌", className: "bg-red-100 text-red-800" };
     case "missed":
@@ -83,8 +111,35 @@ function answerLetter(index: number) {
   return ["A", "B", "C", "D"][index - 1] ?? String(index);
 }
 
-function normalizeRoomCode(value: string | null) {
-  return (value ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+function normalizeRoomCode(value: string | null | undefined) {
+  return (value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 6);
+}
+
+function getRoomCodeFromCurrentUrl() {
+  if (typeof window === "undefined") return "";
+
+  const currentUrl = new URL(window.location.href);
+
+  const fromQuery = normalizeRoomCode(
+    currentUrl.searchParams.get("room") ??
+      currentUrl.searchParams.get("code") ??
+      currentUrl.searchParams.get("r") ??
+      ""
+  );
+
+  if (fromQuery) return fromQuery;
+
+  const hashParams = new URLSearchParams(currentUrl.hash.replace(/^#/, ""));
+  const fromHash = normalizeRoomCode(hashParams.get("room") ?? hashParams.get("code") ?? "");
+
+  if (fromHash) return fromHash;
+
+  const pathMatch = currentUrl.pathname.match(/\/(?:room|join)\/([A-Za-z0-9]{4,8})/i);
+  return normalizeRoomCode(pathMatch?.[1] ?? "");
 }
 
 export function GameClient() {
@@ -121,7 +176,10 @@ export function GameClient() {
       if (!soundEnabled || typeof window === "undefined") return;
 
       const AudioContextClass =
-        window.AudioContext ?? (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        window.AudioContext ??
+        (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+
       if (!AudioContextClass) return;
 
       const audioContext = new AudioContextClass();
@@ -130,6 +188,7 @@ export function GameClient() {
       masterGain.connect(audioContext.destination);
 
       const now = audioContext.currentTime;
+
       const pattern =
         kind === "correct"
           ? [
@@ -146,13 +205,16 @@ export function GameClient() {
       for (const tone of pattern) {
         const oscillator = audioContext.createOscillator();
         const gain = audioContext.createGain();
+
         oscillator.type = "sine";
         oscillator.frequency.value = tone.frequency;
         oscillator.connect(gain);
         gain.connect(masterGain);
+
         gain.gain.setValueAtTime(0.001, now + tone.start);
         gain.gain.exponentialRampToValueAtTime(1, now + tone.start + 0.01);
         gain.gain.exponentialRampToValueAtTime(0.001, now + tone.start + tone.duration);
+
         oscillator.start(now + tone.start);
         oscillator.stop(now + tone.start + tone.duration + 0.03);
       }
@@ -174,12 +236,12 @@ export function GameClient() {
     if (savedUsername.trim()) setUsername(savedUsername);
     if (savedAvatar) setAvatar(savedAvatar);
 
-    const params = new URLSearchParams(window.location.search);
-    const roomFromLink = normalizeRoomCode(params.get("room") ?? params.get("code"));
+    const roomFromLink = getRoomCodeFromCurrentUrl();
 
     if (roomFromLink) {
       setInvitedRoomCode(roomFromLink);
       setRoomCodeInput(roomFromLink);
+      setError(`Invitation détectée : salle ${roomFromLink}`);
 
       if (savedUsername.trim()) {
         setCanAutoJoinInvitation(true);
@@ -212,6 +274,7 @@ export function GameClient() {
       setExplanation(explanation ?? null);
 
       const mine = playerResults.find((result) => result.playerId === playerId) ?? null;
+
       setAnswerResult(mine);
       setSelectedAnswer(mine?.selectedAnswer ?? null);
       setFeedbackStatus("revealed");
@@ -243,19 +306,23 @@ export function GameClient() {
     setCanAutoJoinInvitation(false);
     setError(`Connexion à la salle ${invitedRoomCode}...`);
 
-    socket.emit("room:join", { roomCode: invitedRoomCode, username, avatarUrl: avatar }, (res: SocketResponse) => {
-      if (!res.ok) {
-        setError(res.error ?? "Impossible de rejoindre la salle.");
-        return;
-      }
+    socket.emit(
+      "room:join",
+      { roomCode: invitedRoomCode, username: username.trim(), avatarUrl: avatar },
+      (res: SocketResponse) => {
+        if (!res.ok) {
+          setError(res.error ?? `Impossible de rejoindre la salle ${invitedRoomCode}.`);
+          return;
+        }
 
-      saveProfile();
-      clearInvitationFromUrl();
-      setPlayerId(res.playerId ?? null);
-      setRoom(res.room ?? null);
-      setShowReview(false);
-      setError(null);
-    });
+        saveProfile();
+        clearInvitationFromUrl();
+        setPlayerId(res.playerId ?? null);
+        setRoom(res.room ?? null);
+        setShowReview(false);
+        setError(null);
+      }
+    );
   }, [avatar, canAutoJoinInvitation, invitedRoomCode, playerId, room, socket, username]);
 
   useEffect(() => {
@@ -290,6 +357,8 @@ export function GameClient() {
     const url = new URL(window.location.href);
     url.searchParams.delete("room");
     url.searchParams.delete("code");
+    url.searchParams.delete("r");
+    url.hash = "";
 
     const nextUrl = `${url.pathname}${url.search}${url.hash}` || "/";
     window.history.replaceState({}, "", nextUrl);
@@ -300,12 +369,14 @@ export function GameClient() {
 
     socket.emit("room:create", { username: username.trim(), avatarUrl: avatar }, (res: SocketResponse) => {
       if (!res.ok) return setError(res.error ?? "Impossible de créer la salle.");
+
       saveProfile();
       clearInvitationFromUrl();
       setInvitedRoomCode(null);
       setPlayerId(res.playerId ?? null);
       setRoom(res.room ?? null);
       setShowReview(false);
+      setError(null);
     });
   }
 
@@ -321,6 +392,7 @@ export function GameClient() {
 
     socket.emit("room:join", { roomCode, username: username.trim(), avatarUrl: avatar }, (res: SocketResponse) => {
       if (!res.ok) return setError(res.error ?? "Impossible de rejoindre la salle.");
+
       saveProfile();
       clearInvitationFromUrl();
       setPlayerId(res.playerId ?? null);
@@ -335,15 +407,20 @@ export function GameClient() {
   }
 
   function startGame() {
-    socket.emit("game:start", { roomCode: room?.roomCode, playerId, timerSeconds, questionCount }, (res: SocketResponse) => {
-      if (!res.ok) setError(res.error ?? "Impossible de lancer la partie.");
-    });
+    socket.emit(
+      "game:start",
+      { roomCode: room?.roomCode, playerId, timerSeconds, questionCount },
+      (res: SocketResponse) => {
+        if (!res.ok) setError(res.error ?? "Impossible de lancer la partie.");
+      }
+    );
   }
 
   function submitAnswer(answerIndex: number) {
     if (!room || !playerId || !question || feedbackStatus === "revealed") return;
 
     const previousAnswer = selectedAnswer;
+
     setSelectedAnswer(answerIndex);
     setFeedbackStatus("selected");
     setError(null);
@@ -384,14 +461,17 @@ export function GameClient() {
 
   function invitationUrl() {
     const code = room?.roomCode ?? "";
-    const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://masmis.xyz";
-    const url = new URL(baseUrl);
-    url.searchParams.set("room", code);
-    return url.toString();
+    const baseUrl =
+      typeof window !== "undefined"
+        ? window.location.origin.replace(/\/$/, "")
+        : "https://www.masmis.xyz";
+
+    return `${baseUrl}/?room=${encodeURIComponent(code)}`;
   }
 
   function invitationText() {
     const code = room?.roomCode ?? "";
+
     return `Rejoins ma partie Masmis :
 ${invitationUrl()}
 
@@ -411,6 +491,19 @@ Code : ${code}`;
     window.setTimeout(() => setShareStatus(null), 1800);
   }
 
+  async function copyInvitation() {
+    if (!room?.roomCode) return;
+
+    try {
+      await navigator.clipboard.writeText(invitationText());
+      setShareStatus("Invitation copiée");
+    } catch {
+      setShareStatus("Lien : " + invitationUrl());
+    }
+
+    window.setTimeout(() => setShareStatus(null), 1800);
+  }
+
   async function shareRoom() {
     if (!room?.roomCode) return;
 
@@ -418,32 +511,29 @@ Code : ${code}`;
 
     if (navigator.share) {
       try {
-        // Keep the full invitation in `text` only. Some apps duplicate or strip
-        // query parameters when `url` is provided separately.
-        await navigator.share({ title: "Masmis", text });
+        await navigator.share({
+          title: "Masmis",
+          text
+        });
+
         return;
       } catch {
-        // User cancelled or sharing failed. Fall back to copy.
+        // User cancelled or native share failed. Fall back to copy.
       }
     }
 
-    try {
-      await navigator.clipboard.writeText(text);
-      setShareStatus("Invitation copiée");
-    } catch {
-      setShareStatus("Partage le code : " + room.roomCode);
-    }
-
-    window.setTimeout(() => setShareStatus(null), 1800);
+    await copyInvitation();
   }
 
   function readFileAsDataUrl(file: File) {
     return new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
+
       reader.onload = () => {
         if (typeof reader.result === "string") resolve(reader.result);
         else reject(new Error("Image illisible."));
       };
+
       reader.onerror = () => reject(new Error("Image illisible."));
       reader.readAsDataURL(file);
     });
@@ -452,6 +542,7 @@ Code : ${code}`;
   function loadImage(src: string) {
     return new Promise<HTMLImageElement>((resolve, reject) => {
       const image = new Image();
+
       image.onload = () => resolve(image);
       image.onerror = () => reject(new Error("Image illisible."));
       image.src = src;
@@ -469,6 +560,7 @@ Code : ${code}`;
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
+
     const context = canvas.getContext("2d");
     if (!context) throw new Error("Compression impossible.");
 
@@ -508,9 +600,13 @@ Code : ${code}`;
   }
 
   const sortedPlayers = room?.players.slice().sort((a, b) => b.score - a.score) ?? [];
-  const answeredCount = room?.players.filter((p) => p.currentAnswerStatus && p.currentAnswerStatus !== "choosing").length ?? 0;
+  const answeredCount =
+    room?.players.filter((p) => p.currentAnswerStatus && p.currentAnswerStatus !== "choosing")
+      .length ?? 0;
   const totalQuestions = room?.totalQuestions || questionCount;
-  const progressPercent = question ? Math.max(0, Math.min(100, (timeLeft / question.timerSeconds) * 100)) : 0;
+  const progressPercent = question
+    ? Math.max(0, Math.min(100, (timeLeft / question.timerSeconds) * 100))
+    : 0;
 
   if (!room) {
     return (
@@ -520,7 +616,10 @@ Code : ${code}`;
             <div className="grid min-w-0 gap-0 lg:grid-cols-[1.05fr_0.95fr]">
               <div className="min-w-0 p-4 sm:p-8 md:p-12">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-black uppercase tracking-[0.3em] text-blue-700">Masmis</p>
+                  <p className="text-sm font-black uppercase tracking-[0.3em] text-blue-700">
+                    Masmis
+                  </p>
+
                   <button
                     type="button"
                     onClick={toggleSound}
@@ -534,6 +633,7 @@ Code : ${code}`;
                 <h1 className="mt-4 max-w-full text-3xl font-black leading-tight text-slate-950 min-[380px]:text-4xl sm:text-5xl md:text-6xl">
                   Quiz naturalisation française.
                 </h1>
+
                 <p className="mt-4 max-w-full text-[15px] leading-7 text-slate-600 sm:text-lg sm:leading-8">
                   {invitedRoomCode
                     ? `Choisis ton nom pour rejoindre automatiquement la salle ${invitedRoomCode}.`
@@ -542,8 +642,13 @@ Code : ${code}`;
 
                 {invitedRoomCode && (
                   <div className="mt-5 rounded-3xl bg-blue-50 p-4 ring-1 ring-blue-100">
-                    <p className="text-xs font-black uppercase tracking-widest text-blue-700">Invitation reçue</p>
-                    <p className="mt-1 text-sm font-bold text-slate-700">Salle <span className="font-black text-blue-700">{invitedRoomCode}</span> prête à rejoindre.</p>
+                    <p className="text-xs font-black uppercase tracking-widest text-blue-700">
+                      Invitation reçue
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-slate-700">
+                      Salle <span className="font-black text-blue-700">{invitedRoomCode}</span>{" "}
+                      prête à rejoindre.
+                    </p>
                   </div>
                 )}
 
@@ -561,9 +666,14 @@ Code : ${code}`;
                   <div className="w-full max-w-full min-w-0 rounded-3xl bg-slate-50 p-3 sm:p-4">
                     <div className="mb-3 flex items-center gap-3">
                       <AvatarBubble avatar={avatar} size="lg" />
+
                       <div>
-                        <p className="text-sm font-black uppercase tracking-widest text-slate-500">Avatar</p>
-                        <p className="text-sm text-slate-600">Emoji ou selfie compressé automatiquement.</p>
+                        <p className="text-sm font-black uppercase tracking-widest text-slate-500">
+                          Avatar
+                        </p>
+                        <p className="text-sm text-slate-600">
+                          Emoji ou selfie compressé automatiquement.
+                        </p>
                       </div>
                     </div>
 
@@ -574,7 +684,9 @@ Code : ${code}`;
                           key={item}
                           onClick={() => setAvatar(item)}
                           className={`min-h-12 min-w-0 rounded-2xl border text-xl transition active:scale-95 sm:text-2xl ${
-                            avatar === item ? "border-blue-700 bg-blue-50 shadow-md" : "border-slate-200 bg-white"
+                            avatar === item
+                              ? "border-blue-700 bg-blue-50 shadow-md"
+                              : "border-slate-200 bg-white"
                           }`}
                         >
                           {item}
@@ -584,7 +696,12 @@ Code : ${code}`;
 
                     <label className="mt-3 block cursor-pointer rounded-2xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-center text-sm font-black text-blue-700">
                       Importer une photo / selfie
-                      <input className="hidden" type="file" accept="image/*" onChange={handleAvatarUpload} />
+                      <input
+                        className="hidden"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleAvatarUpload}
+                      />
                     </label>
                   </div>
                 </div>
@@ -593,8 +710,10 @@ Code : ${code}`;
               <div className="min-w-0 overflow-hidden bg-slate-950 p-4 text-white sm:p-8 md:p-10">
                 <div className="min-w-0 overflow-hidden rounded-[1.75rem] bg-white/10 p-4 ring-1 ring-white/10 sm:p-5">
                   <h2 className="text-2xl font-black">Jouer maintenant</h2>
+
                   <p className="mt-2 text-sm leading-6 text-slate-300">
-                    Sur téléphone, les boutons sont grands et tu peux changer ta réponse jusqu'à la fin du timer.
+                    Sur téléphone, les boutons sont grands et tu peux changer ta réponse jusqu'à la
+                    fin du timer.
                   </p>
 
                   <div className="mt-5 grid gap-3">
@@ -614,6 +733,7 @@ Code : ${code}`;
                         maxLength={6}
                         onChange={(e) => setRoomCodeInput(normalizeRoomCode(e.target.value))}
                       />
+
                       <button
                         type="button"
                         onClick={joinRoom}
@@ -624,7 +744,11 @@ Code : ${code}`;
                     </div>
                   </div>
 
-                  {error && <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
+                  {error && (
+                    <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+                      {error}
+                    </p>
+                  )}
                 </div>
 
                 <div className="mt-5 grid min-w-0 grid-cols-3 gap-2 text-center sm:gap-3">
@@ -632,10 +756,12 @@ Code : ${code}`;
                     <p className="text-2xl font-black">8</p>
                     <p className="text-xs text-slate-300">max joueurs</p>
                   </div>
+
                   <div className="rounded-2xl bg-white/10 p-3">
                     <p className="text-2xl font-black">↔</p>
                     <p className="text-xs text-slate-300">réponse modifiable</p>
                   </div>
+
                   <div className="rounded-2xl bg-white/10 p-3">
                     <p className="text-2xl font-black">💡</p>
                     <p className="text-xs text-slate-300">explications</p>
@@ -655,10 +781,18 @@ Code : ${code}`;
         <section className="mx-auto w-full max-w-5xl min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-black uppercase tracking-[0.3em] text-blue-700">Résultats</p>
-              <h1 className="mt-2 text-4xl font-black text-slate-950 sm:text-5xl">Partie terminée</h1>
+              <p className="text-sm font-black uppercase tracking-[0.3em] text-blue-700">
+                Résultats
+              </p>
+              <h1 className="mt-2 text-4xl font-black text-slate-950 sm:text-5xl">
+                Partie terminée
+              </h1>
             </div>
-            <button onClick={goHome} className="rounded-2xl bg-slate-950 px-5 py-3 font-black text-white">
+
+            <button
+              onClick={goHome}
+              className="rounded-2xl bg-slate-950 px-5 py-3 font-black text-white"
+            >
               Accueil
             </button>
           </div>
@@ -667,14 +801,21 @@ Code : ${code}`;
             {sortedPlayers.map((p, index) => (
               <article key={p.id} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-xl font-black text-white">#{index + 1}</div>
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-xl font-black text-white">
+                    #{index + 1}
+                  </div>
+
                   <AvatarBubble avatar={p.avatarUrl} />
+
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xl font-black">{p.username}</p>
                     <p className="text-sm font-semibold text-slate-500">
-                      {p.correctAnswers}/{p.totalAnswers} corrects · {accuracyPercent(p.correctAnswers, p.totalAnswers)}% · moyenne {formatSeconds(p.averageResponseTimeMs)}
+                      {p.correctAnswers}/{p.totalAnswers} corrects ·{" "}
+                      {accuracyPercent(p.correctAnswers, p.totalAnswers)}% · moyenne{" "}
+                      {formatSeconds(p.averageResponseTimeMs)}
                     </p>
                   </div>
+
                   <p className="text-2xl font-black text-blue-700">{p.score}</p>
                 </div>
               </article>
@@ -689,7 +830,12 @@ Code : ${code}`;
             >
               {showReview ? "Masquer la correction" : "Revoir toutes les questions"}
             </button>
-            <button type="button" onClick={goHome} className="min-h-14 rounded-2xl bg-white px-5 py-3 text-lg font-black text-slate-950 ring-1 ring-slate-200">
+
+            <button
+              type="button"
+              onClick={goHome}
+              className="min-h-14 rounded-2xl bg-white px-5 py-3 text-lg font-black text-slate-950 ring-1 ring-slate-200"
+            >
               Nouvelle salle
             </button>
           </div>
@@ -698,20 +844,30 @@ Code : ${code}`;
             <div className="mt-6 space-y-4">
               {(room.review ?? []).map((item, index) => {
                 const mine = item.playerResults.find((result) => result.playerId === playerId);
+
                 return (
                   <article key={item.questionId} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-sm font-black uppercase tracking-widest text-blue-700">Question {index + 1}</p>
+                      <p className="text-sm font-black uppercase tracking-widest text-blue-700">
+                        Question {index + 1}
+                      </p>
+
                       <span
                         className={`rounded-full px-3 py-1 text-sm font-black ${
-                          mine?.isCorrect ? "bg-green-100 text-green-800" : mine?.selectedAnswer ? "bg-red-100 text-red-800" : "bg-slate-200 text-slate-700"
+                          mine?.isCorrect
+                            ? "bg-green-100 text-green-800"
+                            : mine?.selectedAnswer
+                              ? "bg-red-100 text-red-800"
+                              : "bg-slate-200 text-slate-700"
                         }`}
                       >
                         {mine?.isCorrect ? "Correct" : mine?.selectedAnswer ? "Faux" : "Manqué"}
                       </span>
                     </div>
 
-                    <h2 className="mt-3 text-xl font-black leading-snug text-slate-950">{item.questionText}</h2>
+                    <h2 className="mt-3 text-xl font-black leading-snug text-slate-950">
+                      {item.questionText}
+                    </h2>
 
                     <div className="mt-4 grid gap-2">
                       {item.answers.map((answer, answerIndex) => {
@@ -730,7 +886,8 @@ Code : ${code}`;
                                   : "border-slate-200 bg-white text-slate-700"
                             }`}
                           >
-                            <span className="font-black">{answerLetter(answerNumber)}.</span> {answer}
+                            <span className="font-black">{answerLetter(answerNumber)}.</span>{" "}
+                            {answer}
                             {isCorrect && <span className="ml-2">✅</span>}
                             {isMine && !isCorrect && <span className="ml-2">❌</span>}
                           </div>
@@ -740,7 +897,9 @@ Code : ${code}`;
 
                     {item.explanation && (
                       <div className="mt-4 rounded-2xl bg-blue-50 p-4">
-                        <p className="text-xs font-black uppercase tracking-widest text-blue-700">Explication</p>
+                        <p className="text-xs font-black uppercase tracking-widest text-blue-700">
+                          Explication
+                        </p>
                         <p className="mt-2 leading-7 text-slate-700">{item.explanation}</p>
                       </div>
                     )}
@@ -760,15 +919,22 @@ Code : ${code}`;
         <section className="mx-auto w-full max-w-6xl min-w-0">
           <div className="mb-4 flex items-center justify-between gap-3 rounded-3xl bg-white p-3 shadow-sm ring-1 ring-slate-200 sm:p-4">
             <div className="min-w-0">
-              <p className="text-xs font-black uppercase tracking-widest text-blue-700">Salle {room.roomCode}</p>
+              <p className="text-xs font-black uppercase tracking-widest text-blue-700">
+                Salle {room.roomCode}
+              </p>
               <p className="truncate text-sm font-bold text-slate-500">
                 Question {questionNumber}/{totalQuestions}
               </p>
             </div>
+
             <div className="flex items-center gap-2">
-              <button onClick={toggleSound} className="rounded-2xl bg-slate-100 px-3 py-2 text-sm font-black text-slate-700">
+              <button
+                onClick={toggleSound}
+                className="rounded-2xl bg-slate-100 px-3 py-2 text-sm font-black text-slate-700"
+              >
                 {soundEnabled ? "🔊" : "🔇"}
               </button>
+
               <div className="rounded-2xl bg-slate-950 px-4 py-2 text-center text-white">
                 <p className="text-2xl font-black leading-none">{timeLeft}</p>
                 <p className="text-[10px] font-bold uppercase text-slate-300">sec</p>
@@ -779,19 +945,28 @@ Code : ${code}`;
           <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
             <section className="min-w-0 rounded-[1.5rem] bg-white p-4 shadow-xl ring-1 ring-slate-200 sm:rounded-[2rem] sm:p-6 md:p-8">
               <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${progressPercent}%` }} />
+                <div
+                  className="h-full rounded-full bg-blue-600 transition-all"
+                  style={{ width: `${progressPercent}%` }}
+                />
               </div>
 
               <div className="mt-5 flex flex-wrap gap-2 text-xs font-black uppercase tracking-widest text-slate-500">
                 <span className="rounded-full bg-slate-100 px-3 py-1">{question.category}</span>
-                <span className="rounded-full bg-slate-100 px-3 py-1">{question.difficulty}</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1">
+                  {question.difficulty}
+                </span>
               </div>
 
-              <h1 className="mt-4 break-words text-2xl font-black leading-tight text-slate-950 sm:text-3xl md:text-4xl">{question.questionText}</h1>
+              <h1 className="mt-4 break-words text-2xl font-black leading-tight text-slate-950 sm:text-3xl md:text-4xl">
+                {question.questionText}
+              </h1>
 
               {feedbackStatus !== "revealed" && (
                 <div className="mt-4 rounded-2xl bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800">
-                  {selectedAnswer ? "Réponse choisie. Tu peux encore changer avant la fin du timer." : "Choisis une réponse. Tu peux la modifier jusqu'à la fin du timer."}
+                  {selectedAnswer
+                    ? "Réponse choisie. Tu peux encore changer avant la fin du timer."
+                    : "Choisis une réponse. Tu peux la modifier jusqu'à la fin du timer."}
                 </div>
               )}
 
@@ -800,8 +975,10 @@ Code : ${code}`;
                   const answerNumber = index + 1;
                   const isCorrectAnswer = correctAnswer === answerNumber;
                   const isSelected = selectedAnswer === answerNumber;
-                  const selectedWasCorrect = feedbackStatus === "revealed" && answerResult?.isCorrect && isSelected;
-                  const selectedWasWrong = feedbackStatus === "revealed" && answerResult && !answerResult.isCorrect && isSelected;
+                  const selectedWasCorrect =
+                    feedbackStatus === "revealed" && answerResult?.isCorrect && isSelected;
+                  const selectedWasWrong =
+                    feedbackStatus === "revealed" && answerResult && !answerResult.isCorrect && isSelected;
 
                   let className = "border-slate-200 bg-white hover:bg-slate-50 active:scale-[0.99]";
 
@@ -834,12 +1011,18 @@ Code : ${code}`;
                           {answerLetter(answerNumber)}
                         </span>
 
-                        <span className="min-w-0 flex-1 break-words text-base sm:text-lg">{answer}</span>
+                        <span className="min-w-0 flex-1 break-words text-base sm:text-lg">
+                          {answer}
+                        </span>
 
-                        {isSelected && feedbackStatus !== "revealed" && <span className="text-2xl">✍️</span>}
+                        {isSelected && feedbackStatus !== "revealed" && (
+                          <span className="text-2xl">✍️</span>
+                        )}
                         {selectedWasCorrect && <span className="text-2xl">✅</span>}
                         {selectedWasWrong && <span className="text-2xl">❌</span>}
-                        {feedbackStatus === "revealed" && isCorrectAnswer && !isSelected && <span className="text-2xl">✅</span>}
+                        {feedbackStatus === "revealed" && isCorrectAnswer && !isSelected && (
+                          <span className="text-2xl">✅</span>
+                        )}
                       </div>
                     </button>
                   );
@@ -852,11 +1035,20 @@ Code : ${code}`;
                     answerResult.isCorrect ? "bg-green-600 text-white" : "bg-red-600 text-white"
                   }`}
                 >
-                  <div className="text-5xl sm:text-6xl">{answerResult.isCorrect ? "✅" : answerResult.selectedAnswer === null ? "⏰" : "❌"}</div>
+                  <div className="text-5xl sm:text-6xl">
+                    {answerResult.isCorrect ? "✅" : answerResult.selectedAnswer === null ? "⏰" : "❌"}
+                  </div>
+
                   <p className="mt-2 text-3xl font-black sm:text-4xl">
-                    {answerResult.isCorrect ? "CORRECT !" : answerResult.selectedAnswer === null ? "TEMPS ÉCOULÉ !" : "FAUX !"}
+                    {answerResult.isCorrect
+                      ? "CORRECT !"
+                      : answerResult.selectedAnswer === null
+                        ? "TEMPS ÉCOULÉ !"
+                        : "FAUX !"}
                   </p>
+
                   <p className="mt-2 text-2xl font-black">+{answerResult.points} points</p>
+
                   <p className="mt-2 text-sm opacity-90">
                     {answerResult.isCorrect ? "Bien joué." : "La bonne réponse est affichée en vert."}
                   </p>
@@ -865,20 +1057,29 @@ Code : ${code}`;
 
               {explanation && feedbackStatus === "revealed" && (
                 <div className="mt-5 rounded-3xl bg-slate-100 p-5">
-                  <p className="text-sm font-black uppercase tracking-widest text-slate-500">Explication</p>
+                  <p className="text-sm font-black uppercase tracking-widest text-slate-500">
+                    Explication
+                  </p>
                   <p className="mt-2 leading-7 text-slate-700">{explanation}</p>
                 </div>
               )}
 
-              {error && <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 font-semibold text-red-700">{error}</p>}
+              {error && (
+                <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 font-semibold text-red-700">
+                  {error}
+                </p>
+              )}
             </section>
 
             <aside className="min-w-0 rounded-[1.5rem] bg-slate-950 p-4 text-white shadow-xl sm:rounded-[2rem] sm:p-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-black uppercase tracking-widest text-blue-300">Joueurs</p>
+                  <p className="text-sm font-black uppercase tracking-widest text-blue-300">
+                    Joueurs
+                  </p>
                   <h2 className="text-xl font-black sm:text-2xl">État des réponses</h2>
                 </div>
+
                 <div className="rounded-2xl bg-white/10 px-3 py-2 text-sm font-black">
                   {answeredCount}/{room.players.length}
                 </div>
@@ -887,14 +1088,17 @@ Code : ${code}`;
               <div className="mt-4 space-y-3">
                 {sortedPlayers.map((p) => {
                   const status = statusLabel(p.currentAnswerStatus, p.currentAnswerPoints);
+
                   return (
                     <div key={p.id} className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
                       <div className="flex items-center gap-3">
                         <AvatarBubble avatar={p.avatarUrl} size="sm" />
+
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-black">{p.username}</p>
                           <p className="text-xs text-slate-300">{p.score} points</p>
                         </div>
+
                         <span className={`rounded-full px-2.5 py-1 text-xs font-black ${status.className}`}>
                           {status.icon} {status.text}
                         </span>
@@ -905,7 +1109,8 @@ Code : ${code}`;
               </div>
 
               <div className="mt-5 rounded-2xl bg-white/10 p-4 text-sm leading-6 text-slate-300">
-                Les réponses restent secrètes jusqu'à la fin. Tu peux changer ton choix tant que le timer tourne.
+                Les réponses restent secrètes jusqu'à la fin. Tu peux changer ton choix tant que le
+                timer tourne.
               </div>
             </aside>
           </div>
@@ -924,20 +1129,35 @@ Code : ${code}`;
           </div>
 
           <div className="flex items-center gap-2">
-            <button onClick={toggleSound} className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-700 ring-1 ring-slate-200">
+            <button
+              onClick={toggleSound}
+              className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-700 ring-1 ring-slate-200"
+            >
               {soundEnabled ? "🔊 Son" : "🔇 Muet"}
             </button>
-            <span className="rounded-2xl bg-white px-4 py-3 text-sm font-black ring-1 ring-slate-200">{room.players.length}/8 joueurs</span>
+
+            <span className="rounded-2xl bg-white px-4 py-3 text-sm font-black ring-1 ring-slate-200">
+              {room.players.length}/8 joueurs
+            </span>
           </div>
         </div>
 
         <div className="mt-6 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-black uppercase tracking-widest text-slate-500">Code d'invitation</p>
-              <p className="mt-1 text-sm text-slate-500">Clique le code pour le copier, ou partage directement l'invitation.</p>
+              <p className="text-sm font-black uppercase tracking-widest text-slate-500">
+                Code d'invitation
+              </p>
+              <p className="text-sm text-slate-500">
+                Clique le code pour le copier, ou partage directement l'invitation.
+              </p>
             </div>
-            {shareStatus && <span className="rounded-full bg-green-50 px-3 py-1 text-sm font-black text-green-700">{shareStatus}</span>}
+
+            {shareStatus && (
+              <span className="rounded-full bg-green-50 px-3 py-1 text-sm font-black text-green-700">
+                {shareStatus}
+              </span>
+            )}
           </div>
 
           <button
@@ -949,7 +1169,7 @@ Code : ${code}`;
             {room.roomCode}
           </button>
 
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
             <button
               type="button"
               onClick={copyRoomCode}
@@ -957,26 +1177,43 @@ Code : ${code}`;
             >
               Copier le code
             </button>
+
+            <button
+              type="button"
+              onClick={copyInvitation}
+              className="min-h-12 rounded-2xl bg-white px-4 py-3 font-black text-slate-950 ring-1 ring-slate-200 transition active:scale-[0.98]"
+            >
+              Copier l'invitation
+            </button>
+
             <button
               type="button"
               onClick={shareRoom}
               className="min-h-12 rounded-2xl bg-blue-700 px-4 py-3 font-black text-white transition active:scale-[0.98]"
             >
-              Partager l'invitation
+              Partager
             </button>
           </div>
         </div>
 
         <div className="mt-6 grid gap-3">
           {room.players.map((p) => (
-            <div key={p.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+            <div
+              key={p.id}
+              className="flex items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200"
+            >
               <div className="flex min-w-0 items-center gap-3 font-black">
                 <AvatarBubble avatar={p.avatarUrl} />
                 <span className="truncate">
                   {p.username} {p.isHost && <span className="text-blue-700">· Host</span>}
                 </span>
               </div>
-              <div className={`shrink-0 rounded-full px-3 py-1 text-sm font-bold ${p.isReady ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"}`}>
+
+              <div
+                className={`shrink-0 rounded-full px-3 py-1 text-sm font-bold ${
+                  p.isReady ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"
+                }`}
+              >
                 {p.isReady ? "Prêt" : "Pas prêt"}
               </div>
             </div>
@@ -1026,7 +1263,11 @@ Code : ${code}`;
             </button>
           )}
 
-          {error && <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 font-semibold text-red-700">{error}</p>}
+          {error && (
+            <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 font-semibold text-red-700">
+              {error}
+            </p>
+          )}
         </div>
       </section>
     </main>
