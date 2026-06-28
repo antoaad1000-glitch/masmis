@@ -102,3 +102,33 @@ The original source documents are included in:
 ```txt
 data/sources/
 ```
+
+## Updated mobile/gameplay version
+
+This ZIP includes the latest fixes requested in chat:
+
+- Mobile-first login/lobby/game screens.
+- Players can change their answer while the timer is still running.
+- Gentle in-browser sounds for selecting an answer, correct reveal and wrong reveal, with a mute toggle.
+- Explanation shown after each question reveal.
+- End-of-game review screen showing every question, the player's answer, the correct answer and the explanation.
+- Fixed Vercel TypeScript admin header build issue.
+- Realtime server now uses Railway's `PORT` env var and comma-separated `CORS_ORIGIN` values.
+
+After replacing your local project with this one, run:
+
+```powershell
+pnpm install
+Copy-Item .env packages\db\.env -Force
+pnpm db:generate
+pnpm --filter @masmis/web build
+pnpm --filter @masmis/realtime build
+```
+
+Then commit and push:
+
+```powershell
+git add .
+git commit -m "Improve mobile UI and gameplay review"
+git push origin main
+```

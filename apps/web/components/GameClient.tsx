@@ -1,19 +1,41 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { accuracyPercent, type AnswerStatus, type PublicQuestion, type RoomState } from "@masmis/shared";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import {
+  accuracyPercent,
+  type AnswerStatus,
+  type PlayerQuestionResult,
+  type PublicQuestion,
+  type ReviewQuestion,
+  type RoomState
+} from "@masmis/shared";
 import { getSocket } from "@/lib/socket";
 
-type RevealResult = {
-  playerId: string;
-  selectedAnswer: number | null;
-  isCorrect: boolean;
-  points: number;
-  responseTimeMs: number;
+type RevealPayload = {
+  questionId: string;
+  correctAnswer: number;
+  explanation?: string | null;
+  playerResults: PlayerQuestionResult[];
+  reviewItem?: ReviewQuestion;
 };
 
-type MyAnswerResult = RevealResult | null;
-type FeedbackStatus = "idle" | "locked" | "revealed";
+type QuestionShowPayload = {
+  question: PublicQuestion;
+  index: number;
+  total: number;
+  startedAt: number;
+};
+
+type SocketResponse = {
+  ok: boolean;
+  error?: string;
+  playerId?: string;
+  room?: RoomState;
+  selectedAnswer?: number;
+};
+
+type FeedbackStatus = "idle" | "selected" | "revealed";
+type SoundKind = "select" | "correct" | "wrong";
 
 const avatars = ["🇫🇷", "🗼", "🐓", "📚", "⚖️", "🎨", "🏛️", "🥐", "🧠", "⭐", "🚀", "🦊"];
 
@@ -22,14 +44,14 @@ function isImageAvatar(avatar?: string | null) {
 }
 
 function AvatarBubble({ avatar, size = "md" }: { avatar?: string | null; size?: "sm" | "md" | "lg" }) {
-  const sizeClass = size === "lg" ? "h-16 w-16 text-4xl" : size === "sm" ? "h-9 w-9 text-xl" : "h-12 w-12 text-2xl";
+  const sizeClass = size === "lg" ? "h-16 w-16 text-4xl" : size === "sm" ? "h-10 w-10 text-xl" : "h-12 w-12 text-2xl";
 
   if (isImageAvatar(avatar)) {
-    return <img src={avatar ?? ""} alt="Avatar" className={`${sizeClass} rounded-2xl object-cover ring-2 ring-white/70`} />;
+    return <img src={avatar ?? ""} alt="Avatar" className={`${sizeClass} shrink-0 rounded-2xl object-cover ring-2 ring-white/70`} />;
   }
 
   return (
-    <span className={`${sizeClass} flex items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-200`}>
+    <span className={`${sizeClass} flex shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-200`}>
       {avatar || "🙂"}
     </span>
   );
@@ -38,9 +60,9 @@ function AvatarBubble({ avatar, size = "md" }: { avatar?: string | null; size?: 
 function statusLabel(status?: AnswerStatus, points?: number) {
   switch (status) {
     case "choosing":
-      return { text: "Choisit...", icon: "🤔", className: "bg-slate-100 text-slate-600" };
+      return { text: "Réfléchit", icon: "🤔", className: "bg-slate-100 text-slate-600" };
     case "locked":
-      return { text: "Verrouillé", icon: "🔒", className: "bg-amber-100 text-amber-800" };
+      return { text: "Répondu", icon: "✍️", className: "bg-blue-100 text-blue-800" };
     case "correct":
       return { text: `Correct +${points ?? 0}`, icon: "✅", className: "bg-green-100 text-green-800" };
     case "wrong":
@@ -57,6 +79,10 @@ function formatSeconds(ms: number) {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+function answerLetter(index: number) {
+  return ["A", "B", "C", "D"][index - 1] ?? String(index);
+}
+
 export function GameClient() {
   const socket = useMemo(() => getSocket(), []);
 
@@ -66,7 +92,7 @@ export function GameClient() {
   const [room, setRoom] = useState<RoomState | null>(null);
   const [question, setQuestion] = useState<PublicQuestion | null>(null);
   const [questionNumber, setQuestionNumber] = useState(0);
-  const [answerResult, setAnswerResult] = useState<MyAnswerResult>(null);
+  const [answerResult, setAnswerResult] = useState<PlayerQuestionResult | null>(null);
   const [feedbackStatus, setFeedbackStatus] = useState<FeedbackStatus>("idle");
   const [correctAnswer, setCorrectAnswer] = useState<number | null>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
@@ -76,11 +102,74 @@ export function GameClient() {
   const [timerSeconds, setTimerSeconds] = useState(10);
   const [questionCount, setQuestionCount] = useState(10);
   const [timeLeft, setTimeLeft] = useState(10);
+  const [questionStartedAt, setQuestionStartedAt] = useState<number | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [showReview, setShowReview] = useState(false);
+
+  const me = room?.players.find((p) => p.id === playerId);
+  const isHost = Boolean(me?.isHost);
+
+  const playSound = useCallback(
+    (kind: SoundKind) => {
+      if (!soundEnabled || typeof window === "undefined") return;
+
+      const AudioContextClass =
+        window.AudioContext ?? (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextClass) return;
+
+      const audioContext = new AudioContextClass();
+      const masterGain = audioContext.createGain();
+      masterGain.gain.value = 0.055;
+      masterGain.connect(audioContext.destination);
+
+      const now = audioContext.currentTime;
+      const pattern =
+        kind === "correct"
+          ? [
+              { frequency: 660, start: 0, duration: 0.09 },
+              { frequency: 880, start: 0.1, duration: 0.13 }
+            ]
+          : kind === "wrong"
+            ? [
+                { frequency: 260, start: 0, duration: 0.12 },
+                { frequency: 210, start: 0.13, duration: 0.14 }
+              ]
+            : [{ frequency: 520, start: 0, duration: 0.06 }];
+
+      for (const tone of pattern) {
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        oscillator.type = "sine";
+        oscillator.frequency.value = tone.frequency;
+        oscillator.connect(gain);
+        gain.connect(masterGain);
+        gain.gain.setValueAtTime(0.001, now + tone.start);
+        gain.gain.exponentialRampToValueAtTime(1, now + tone.start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + tone.start + tone.duration);
+        oscillator.start(now + tone.start);
+        oscillator.stop(now + tone.start + tone.duration + 0.03);
+      }
+
+      window.setTimeout(() => {
+        void audioContext.close();
+      }, 600);
+    },
+    [soundEnabled]
+  );
+
+  useEffect(() => {
+    const savedSound = localStorage.getItem("masmis_sound_enabled");
+    if (savedSound === "false") setSoundEnabled(false);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("masmis_sound_enabled", String(soundEnabled));
+  }, [soundEnabled]);
 
   useEffect(() => {
     socket.on("room:update", setRoom);
 
-    socket.on("question:show", ({ question, index }: { question: PublicQuestion; index: number }) => {
+    socket.on("question:show", ({ question, index, startedAt }: QuestionShowPayload) => {
       setQuestion(question);
       setQuestionNumber(index);
       setAnswerResult(null);
@@ -89,23 +178,30 @@ export function GameClient() {
       setSelectedAnswer(null);
       setExplanation(null);
       setTimeLeft(question.timerSeconds);
+      setQuestionStartedAt(startedAt);
+      setShowReview(false);
     });
 
-    socket.on(
-      "question:reveal",
-      ({ correctAnswer, explanation, playerResults }: { correctAnswer: number; explanation?: string; playerResults: RevealResult[] }) => {
-        setCorrectAnswer(correctAnswer);
-        setExplanation(explanation ?? null);
-        const mine = playerResults.find((result) => result.playerId === playerId) ?? null;
-        setAnswerResult(mine);
-        setFeedbackStatus("revealed");
+    socket.on("question:reveal", ({ correctAnswer, explanation, playerResults }: RevealPayload) => {
+      setCorrectAnswer(correctAnswer);
+      setExplanation(explanation ?? null);
+
+      const mine = playerResults.find((result) => result.playerId === playerId) ?? null;
+      setAnswerResult(mine);
+      setSelectedAnswer(mine?.selectedAnswer ?? null);
+      setFeedbackStatus("revealed");
+      setTimeLeft(0);
+
+      if (mine) {
+        playSound(mine.isCorrect ? "correct" : "wrong");
       }
-    );
+    });
 
     socket.on("game:finished", (room: RoomState) => {
       setRoom(room);
       setQuestion(null);
       setFeedbackStatus("idle");
+      setShowReview(false);
     });
 
     return () => {
@@ -114,23 +210,18 @@ export function GameClient() {
       socket.off("question:reveal");
       socket.off("game:finished");
     };
-  }, [socket, playerId]);
+  }, [socket, playerId, playSound]);
 
   useEffect(() => {
-    if (!question) return;
-
-    const startedAt = Date.now();
+    if (!question || !questionStartedAt || feedbackStatus === "revealed") return;
 
     const interval = window.setInterval(() => {
-      const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+      const elapsedSeconds = Math.floor((Date.now() - questionStartedAt) / 1000);
       setTimeLeft(Math.max(0, question.timerSeconds - elapsedSeconds));
-    }, 250);
+    }, 200);
 
     return () => window.clearInterval(interval);
-  }, [question?.id]);
-
-  const me = room?.players.find((p) => p.id === playerId);
-  const isHost = Boolean(me?.isHost);
+  }, [question?.id, questionStartedAt, feedbackStatus]);
 
   function ensureUsername() {
     if (!username.trim()) {
@@ -145,20 +236,22 @@ export function GameClient() {
   function createRoom() {
     if (!ensureUsername()) return;
 
-    socket.emit("room:create", { username, avatarUrl: avatar }, (res: any) => {
-      if (!res.ok) return setError(res.error);
-      setPlayerId(res.playerId);
-      setRoom(res.room);
+    socket.emit("room:create", { username, avatarUrl: avatar }, (res: SocketResponse) => {
+      if (!res.ok) return setError(res.error ?? "Impossible de créer la salle.");
+      setPlayerId(res.playerId ?? null);
+      setRoom(res.room ?? null);
+      setShowReview(false);
     });
   }
 
   function joinRoom() {
     if (!ensureUsername()) return;
 
-    socket.emit("room:join", { roomCode: roomCodeInput, username, avatarUrl: avatar }, (res: any) => {
-      if (!res.ok) return setError(res.error);
-      setPlayerId(res.playerId);
-      setRoom(res.room);
+    socket.emit("room:join", { roomCode: roomCodeInput, username, avatarUrl: avatar }, (res: SocketResponse) => {
+      if (!res.ok) return setError(res.error ?? "Impossible de rejoindre la salle.");
+      setPlayerId(res.playerId ?? null);
+      setRoom(res.room ?? null);
+      setShowReview(false);
     });
   }
 
@@ -167,25 +260,28 @@ export function GameClient() {
   }
 
   function startGame() {
-    socket.emit("game:start", { roomCode: room?.roomCode, playerId, timerSeconds, questionCount }, (res: any) => {
-      if (!res.ok) setError(res.error);
+    socket.emit("game:start", { roomCode: room?.roomCode, playerId, timerSeconds, questionCount }, (res: SocketResponse) => {
+      if (!res.ok) setError(res.error ?? "Impossible de lancer la partie.");
     });
   }
 
   function submitAnswer(answerIndex: number) {
-    if (!room || !playerId || !question || selectedAnswer !== null || feedbackStatus !== "idle") return;
+    if (!room || !playerId || !question || feedbackStatus === "revealed") return;
 
+    const previousAnswer = selectedAnswer;
     setSelectedAnswer(answerIndex);
-    setFeedbackStatus("locked");
+    setFeedbackStatus("selected");
+    setError(null);
+    playSound("select");
 
     socket.emit(
       "answer:submit",
       { roomCode: room.roomCode, playerId, questionId: question.id, selectedAnswer: answerIndex },
-      (res: any) => {
+      (res: SocketResponse) => {
         if (!res.ok) {
-          setSelectedAnswer(null);
-          setFeedbackStatus("idle");
-          return setError(res.error);
+          setSelectedAnswer(previousAnswer);
+          setFeedbackStatus(previousAnswer ? "selected" : "idle");
+          return setError(res.error ?? "La réponse n'a pas pu être envoyée.");
         }
       }
     );
@@ -202,6 +298,11 @@ export function GameClient() {
     setSelectedAnswer(null);
     setExplanation(null);
     setError(null);
+    setShowReview(false);
+  }
+
+  function toggleSound() {
+    setSoundEnabled((value) => !value);
   }
 
   function handleAvatarUpload(event: ChangeEvent<HTMLInputElement>) {
@@ -228,101 +329,129 @@ export function GameClient() {
     reader.readAsDataURL(file);
   }
 
+  const sortedPlayers = room?.players.slice().sort((a, b) => b.score - a.score) ?? [];
+  const answeredCount = room?.players.filter((p) => p.currentAnswerStatus && p.currentAnswerStatus !== "choosing").length ?? 0;
+  const totalQuestions = room?.totalQuestions || questionCount;
+  const progressPercent = question ? Math.max(0, Math.min(100, (timeLeft / question.timerSeconds) * 100)) : 0;
+
   if (!room) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-red-50 px-6 py-12">
-        <section className="mx-auto flex min-h-[80vh] max-w-6xl items-center">
+      <main className="min-h-[100dvh] bg-gradient-to-br from-blue-50 via-white to-red-50 px-4 py-5 sm:px-6 sm:py-10">
+        <section className="mx-auto flex min-h-[calc(100dvh-2.5rem)] max-w-6xl items-center">
           <div className="w-full overflow-hidden rounded-[2rem] bg-white shadow-xl ring-1 ring-slate-200">
-            <div className="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
-              <div className="p-8 md:p-12">
-                <p className="text-sm font-black uppercase tracking-[0.3em] text-blue-700">Masmis</p>
-                <h1 className="mt-4 text-4xl font-black leading-tight text-slate-950 md:text-6xl">
-                  Révise la naturalisation française en mode quiz.
+            <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
+              <div className="p-5 sm:p-8 md:p-12">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-black uppercase tracking-[0.3em] text-blue-700">Masmis</p>
+                  <button
+                    type="button"
+                    onClick={toggleSound}
+                    className="rounded-full bg-slate-100 px-3 py-2 text-sm font-black text-slate-700"
+                    aria-label="Activer ou désactiver le son"
+                  >
+                    {soundEnabled ? "🔊" : "🔇"}
+                  </button>
+                </div>
+
+                <h1 className="mt-4 text-4xl font-black leading-tight text-slate-950 sm:text-5xl md:text-6xl">
+                  Quiz naturalisation française.
                 </h1>
-                <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
-                  Crée une salle, invite jusqu'à 8 joueurs, réponds vite et grimpe au classement.
+                <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg sm:leading-8">
+                  Crée une salle, invite tes amis et révise avec les explications après chaque question.
                 </p>
 
-                <div className="mt-8 grid gap-4">
-                  <input
-                    className="rounded-2xl border border-slate-300 px-4 py-4 text-lg outline-none transition focus:border-blue-700 focus:ring-4 focus:ring-blue-100"
-                    placeholder="Nom d'utilisateur"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                  />
+                <div className="mt-7 grid gap-4">
+                  <label className="grid gap-2 text-sm font-black text-slate-700">
+                    Ton nom
+                    <input
+                      className="h-14 rounded-2xl border border-slate-300 px-4 text-lg outline-none transition focus:border-blue-700 focus:ring-4 focus:ring-blue-100"
+                      placeholder="Ex : Elias"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                    />
+                  </label>
 
                   <div className="rounded-3xl bg-slate-50 p-4">
                     <div className="mb-3 flex items-center gap-3">
                       <AvatarBubble avatar={avatar} size="lg" />
                       <div>
                         <p className="text-sm font-black uppercase tracking-widest text-slate-500">Avatar</p>
-                        <p className="text-sm text-slate-600">Choisis un avatar ou importe ta photo.</p>
+                        <p className="text-sm text-slate-600">Emoji ou photo légère.</p>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
+                    <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
                       {avatars.map((item) => (
                         <button
+                          type="button"
                           key={item}
                           onClick={() => setAvatar(item)}
-                          className={`rounded-2xl border px-4 py-3 text-2xl transition hover:scale-105 ${
+                          className={`min-h-12 rounded-2xl border text-2xl transition active:scale-95 ${
                             avatar === item ? "border-blue-700 bg-blue-50 shadow-md" : "border-slate-200 bg-white"
                           }`}
                         >
                           {item}
                         </button>
                       ))}
-
-                      <label className="cursor-pointer rounded-2xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-sm font-black text-blue-700 transition hover:bg-blue-100">
-                        📷 Photo
-                        <input type="file" accept="image/*" capture="user" className="hidden" onChange={handleAvatarUpload} />
-                      </label>
                     </div>
+
+                    <label className="mt-3 block cursor-pointer rounded-2xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-center text-sm font-black text-blue-700">
+                      Importer une photo
+                      <input className="hidden" type="file" accept="image/*" onChange={handleAvatarUpload} />
+                    </label>
                   </div>
                 </div>
-
-                <div className="mt-8 grid gap-3 md:grid-cols-2">
-                  <button
-                    onClick={createRoom}
-                    className="rounded-2xl bg-blue-700 px-5 py-4 text-lg font-black text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5 hover:bg-blue-800"
-                  >
-                    Créer une salle
-                  </button>
-
-                  <div className="flex gap-2">
-                    <input
-                      className="min-w-0 flex-1 rounded-2xl border border-slate-300 px-4 py-3 uppercase outline-none focus:border-slate-950"
-                      placeholder="Code salle"
-                      value={roomCodeInput}
-                      onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
-                    />
-                    <button
-                      onClick={joinRoom}
-                      className="rounded-2xl bg-slate-950 px-5 py-3 font-black text-white transition hover:bg-slate-800"
-                    >
-                      Rejoindre
-                    </button>
-                  </div>
-                </div>
-
-                {error && <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 font-semibold text-red-700">{error}</p>}
               </div>
 
-              <div className="flex items-center justify-center bg-slate-950 p-8 text-white">
-                <div className="w-full max-w-sm rounded-3xl bg-white/10 p-6 ring-1 ring-white/10">
-                  <p className="text-sm font-bold uppercase tracking-[0.25em] text-blue-200">Mode multijoueur</p>
-                  <div className="mt-6 space-y-4">
-                    {[
-                      ["⚡", "Réponds vite", "Plus tu réponds vite, plus tu gagnes de points."],
-                      ["🏆", "Classement final", "Compare score, précision et temps moyen."],
-                      ["📚", "Sources officielles", "Questions inspirées des documents de naturalisation."]
-                    ].map(([icon, title, text]) => (
-                      <div key={title} className="rounded-2xl bg-white/10 p-4">
-                        <div className="text-3xl">{icon}</div>
-                        <p className="mt-2 font-black">{title}</p>
-                        <p className="mt-1 text-sm text-slate-300">{text}</p>
-                      </div>
-                    ))}
+              <div className="bg-slate-950 p-5 text-white sm:p-8 md:p-10">
+                <div className="rounded-[1.75rem] bg-white/10 p-4 ring-1 ring-white/10 sm:p-5">
+                  <h2 className="text-2xl font-black">Jouer maintenant</h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-300">
+                    Sur téléphone, les boutons sont grands et tu peux changer ta réponse jusqu'à la fin du timer.
+                  </p>
+
+                  <div className="mt-5 grid gap-3">
+                    <button
+                      type="button"
+                      onClick={createRoom}
+                      className="h-14 rounded-2xl bg-blue-600 px-5 text-lg font-black text-white shadow-lg shadow-blue-950/20 transition active:scale-[0.98]"
+                    >
+                      Créer une salle
+                    </button>
+
+                    <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                      <input
+                        className="h-14 rounded-2xl border border-white/10 bg-white px-4 text-center text-xl font-black uppercase tracking-[0.25em] text-slate-950 outline-none"
+                        placeholder="CODE"
+                        value={roomCodeInput}
+                        maxLength={6}
+                        onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
+                      />
+                      <button
+                        type="button"
+                        onClick={joinRoom}
+                        className="h-14 rounded-2xl bg-white px-5 text-lg font-black text-slate-950 transition active:scale-[0.98]"
+                      >
+                        Rejoindre
+                      </button>
+                    </div>
+                  </div>
+
+                  {error && <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
+                </div>
+
+                <div className="mt-5 grid grid-cols-3 gap-3 text-center">
+                  <div className="rounded-2xl bg-white/10 p-3">
+                    <p className="text-2xl font-black">8</p>
+                    <p className="text-xs text-slate-300">joueurs</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/10 p-3">
+                    <p className="text-2xl font-black">500</p>
+                    <p className="text-xs text-slate-300">questions</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/10 p-3">
+                    <p className="text-2xl font-black">B1</p>
+                    <p className="text-xs text-slate-300">civique</p>
                   </div>
                 </div>
               </div>
@@ -334,272 +463,276 @@ export function GameClient() {
   }
 
   if (room.status === "finished") {
-    const ranked = [...room.players].sort((a, b) => b.score - a.score);
-    const winner = ranked[0];
-
     return (
-      <main className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 px-6 py-10 text-white">
-        <section className="mx-auto max-w-6xl">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+      <main className="min-h-[100dvh] bg-gradient-to-br from-blue-50 via-white to-slate-100 px-4 py-5 sm:px-6 sm:py-10">
+        <section className="mx-auto max-w-5xl">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-black uppercase tracking-[0.3em] text-blue-300">Partie terminée</p>
-              <h1 className="mt-2 text-4xl font-black md:text-6xl">Classement final</h1>
+              <p className="text-sm font-black uppercase tracking-[0.3em] text-blue-700">Résultats</p>
+              <h1 className="mt-2 text-4xl font-black text-slate-950 sm:text-5xl">Partie terminée</h1>
             </div>
-
-            <button
-              onClick={goHome}
-              className="rounded-2xl bg-white px-5 py-3 font-black text-slate-950 shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50"
-            >
-              Retour à l’accueil
+            <button onClick={goHome} className="rounded-2xl bg-slate-950 px-5 py-3 font-black text-white">
+              Accueil
             </button>
           </div>
 
-          {winner && (
-            <div className="mt-8 overflow-hidden rounded-[2rem] bg-gradient-to-r from-yellow-300 via-amber-200 to-yellow-100 p-1 text-slate-950 shadow-2xl">
-              <div className="rounded-[1.8rem] bg-white/80 p-8 text-center backdrop-blur">
-                <div className="flex justify-center"><AvatarBubble avatar={winner.avatarUrl} size="lg" /></div>
-                <div className="mt-3 text-6xl">🏆</div>
-                <p className="mt-3 text-sm font-black uppercase tracking-[0.3em] text-amber-700">Grand gagnant</p>
-                <h2 className="mt-2 text-4xl font-black">{winner.username}</h2>
-                <p className="mt-2 text-2xl font-black text-blue-700">{winner.score} points</p>
-              </div>
-            </div>
-          )}
-
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            {ranked.slice(0, 3).map((p, i) => (
-              <div key={p.id} className="rounded-3xl bg-white/10 p-6 text-center ring-1 ring-white/10 backdrop-blur">
-                <div className="flex justify-center"><AvatarBubble avatar={p.avatarUrl} size="lg" /></div>
-                <div className="mt-3 text-5xl">{["🥇", "🥈", "🥉"][i]}</div>
-                <p className="mt-3 text-xl font-black">{p.username}</p>
-                <p className="mt-1 text-3xl font-black text-blue-300">{p.score}</p>
-                <p className="mt-1 text-sm text-slate-300">points</p>
-              </div>
+          <div className="mt-6 grid gap-4">
+            {sortedPlayers.map((p, index) => (
+              <article key={p.id} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-xl font-black text-white">#{index + 1}</div>
+                  <AvatarBubble avatar={p.avatarUrl} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xl font-black">{p.username}</p>
+                    <p className="text-sm font-semibold text-slate-500">
+                      {p.correctAnswers}/{p.totalAnswers} corrects · {accuracyPercent(p.correctAnswers, p.totalAnswers)}% · moyenne {formatSeconds(p.averageResponseTimeMs)}
+                    </p>
+                  </div>
+                  <p className="text-2xl font-black text-blue-700">{p.score}</p>
+                </div>
+              </article>
             ))}
           </div>
 
-          <div className="mt-8 space-y-4">
-            {ranked.map((p, i) => {
-              const accuracy = accuracyPercent(p.correctAnswers, p.totalAnswers);
-              const avgTime = formatSeconds(p.averageResponseTimeMs);
-
-              return (
-                <div key={p.id} className="rounded-3xl bg-white p-5 text-slate-950 shadow-xl">
-                  <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="text-2xl font-black text-slate-400">#{i + 1}</div>
-                      <AvatarBubble avatar={p.avatarUrl} />
-                      <div>
-                        <div className="text-lg font-black">{p.username}</div>
-                        <p className="text-sm text-slate-500">{accuracy >= 80 ? "🔥 Excellent" : accuracy >= 50 ? "👍 Bon score" : "💪 À revoir"}</p>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl bg-blue-50 px-5 py-3 text-right">
-                      <p className="text-3xl font-black text-blue-700">{p.score}</p>
-                      <p className="text-xs font-bold uppercase tracking-widest text-blue-500">points</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 grid gap-3 md:grid-cols-3">
-                    <div className="rounded-2xl bg-slate-100 p-4">
-                      <p className="text-xs font-black uppercase tracking-widest text-slate-500">Bonnes réponses</p>
-                      <p className="mt-1 text-3xl font-black text-slate-950">{p.correctAnswers}/{p.totalAnswers}</p>
-                    </div>
-                    <div className="rounded-2xl bg-slate-100 p-4">
-                      <p className="text-xs font-black uppercase tracking-widest text-slate-500">Précision</p>
-                      <p className="mt-1 text-3xl font-black text-slate-950">{accuracy}%</p>
-                    </div>
-                    <div className="rounded-2xl bg-slate-100 p-4">
-                      <p className="text-xs font-black uppercase tracking-widest text-slate-500">Temps moyen</p>
-                      <p className="mt-1 text-3xl font-black text-slate-950">{avgTime}</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4">
-                    <div className="mb-1 flex justify-between text-xs font-bold uppercase tracking-widest text-slate-500">
-                      <span>Précision</span>
-                      <span>{accuracy}%</span>
-                    </div>
-                    <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-blue-700" style={{ width: `${accuracy}%` }} />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="mt-8 text-center">
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <button
-              onClick={goHome}
-              className="rounded-2xl bg-blue-600 px-8 py-4 text-lg font-black text-white shadow-lg shadow-blue-900/40 transition hover:-translate-y-0.5 hover:bg-blue-500"
+              type="button"
+              onClick={() => setShowReview((value) => !value)}
+              className="min-h-14 flex-1 rounded-2xl bg-blue-700 px-5 py-3 text-lg font-black text-white shadow-lg shadow-blue-100"
             >
-              Nouvelle partie
+              {showReview ? "Masquer la correction" : "Revoir toutes les questions"}
+            </button>
+            <button type="button" onClick={goHome} className="min-h-14 rounded-2xl bg-white px-5 py-3 text-lg font-black text-slate-950 ring-1 ring-slate-200">
+              Nouvelle salle
             </button>
           </div>
+
+          {showReview && (
+            <div className="mt-6 space-y-4">
+              {(room.review ?? []).map((item, index) => {
+                const mine = item.playerResults.find((result) => result.playerId === playerId);
+                const myAnswerText = mine?.selectedAnswer ? item.answers[mine.selectedAnswer - 1] : "Aucune réponse";
+                const correctAnswerText = item.answers[item.correctAnswer - 1];
+
+                return (
+                  <article key={item.questionId} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-sm font-black uppercase tracking-widest text-blue-700">Question {index + 1}</p>
+                      <span
+                        className={`rounded-full px-3 py-1 text-sm font-black ${
+                          mine?.isCorrect ? "bg-green-100 text-green-800" : mine?.selectedAnswer ? "bg-red-100 text-red-800" : "bg-slate-200 text-slate-700"
+                        }`}
+                      >
+                        {mine?.isCorrect ? "Correct" : mine?.selectedAnswer ? "Faux" : "Manqué"}
+                      </span>
+                    </div>
+
+                    <h2 className="mt-3 text-xl font-black leading-snug text-slate-950">{item.questionText}</h2>
+
+                    <div className="mt-4 grid gap-2">
+                      {item.answers.map((answer, answerIndex) => {
+                        const answerNumber = answerIndex + 1;
+                        const isCorrect = answerNumber === item.correctAnswer;
+                        const isMine = answerNumber === mine?.selectedAnswer;
+
+                        return (
+                          <div
+                            key={`${item.questionId}-${answerIndex}`}
+                            className={`rounded-2xl border px-4 py-3 font-semibold ${
+                              isCorrect
+                                ? "border-green-500 bg-green-50 text-green-900"
+                                : isMine
+                                  ? "border-red-500 bg-red-50 text-red-900"
+                                  : "border-slate-200 bg-white text-slate-700"
+                            }`}
+                          >
+                            <span className="font-black">{answerLetter(answerNumber)}.</span> {answer}
+                            {isCorrect && <span className="ml-2">✅</span>}
+                            {isMine && !isCorrect && <span className="ml-2">❌</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-4 grid gap-2 rounded-2xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
+                      <p>
+                        <span className="font-black text-slate-600">Ta réponse : </span>
+                        {myAnswerText}
+                      </p>
+                      <p>
+                        <span className="font-black text-slate-600">Bonne réponse : </span>
+                        {correctAnswerText}
+                      </p>
+                    </div>
+
+                    {item.explanation && (
+                      <div className="mt-4 rounded-2xl bg-blue-50 p-4">
+                        <p className="text-xs font-black uppercase tracking-widest text-blue-700">Explication</p>
+                        <p className="mt-2 leading-7 text-slate-700">{item.explanation}</p>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </section>
       </main>
     );
   }
 
   if (question) {
-    const progress = Math.max(0, Math.min(100, (timeLeft / question.timerSeconds) * 100));
-    const lockedCount = room.players.filter((p) => p.currentAnswerStatus === "locked" || p.currentAnswerStatus === "correct" || p.currentAnswerStatus === "wrong" || p.currentAnswerStatus === "missed").length;
-
     return (
-      <main className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-slate-100 px-6 py-10">
-        <section className="mx-auto max-w-7xl">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="font-black text-blue-700">
-                Question {questionNumber}/{room.totalQuestions}
+      <main className="min-h-[100dvh] bg-gradient-to-br from-blue-50 via-white to-slate-100 px-4 py-5 sm:px-6 sm:py-8">
+        <section className="mx-auto max-w-6xl">
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-3xl bg-white p-3 shadow-sm ring-1 ring-slate-200 sm:p-4">
+            <div className="min-w-0">
+              <p className="text-xs font-black uppercase tracking-widest text-blue-700">Salle {room.roomCode}</p>
+              <p className="truncate text-sm font-bold text-slate-500">
+                Question {questionNumber}/{totalQuestions}
               </p>
-              <p className="text-sm text-slate-500">Salle {room.roomCode}</p>
             </div>
-
-            <div className={`rounded-2xl px-5 py-3 text-2xl font-black ${timeLeft <= 3 ? "bg-red-100 text-red-700" : "bg-white text-slate-950"}`}>
-              ⏱️ {timeLeft}s
-            </div>
-          </div>
-
-          <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-200">
-            <div className={`h-full rounded-full transition-all ${timeLeft <= 3 ? "bg-red-600" : "bg-blue-700"}`} style={{ width: `${progress}%` }} />
-          </div>
-
-          <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
-            <section className="overflow-hidden rounded-[2rem] bg-white shadow-xl ring-1 ring-slate-200">
-              <div className="p-6 md:p-8">
-                <div className="flex flex-wrap gap-2 text-sm font-bold">
-                  <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">{question.category}</span>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">{question.difficulty}</span>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">{question.timerSeconds}s</span>
-                </div>
-
-                <h1 className="mt-5 text-3xl font-black leading-tight text-slate-950 md:text-4xl">{question.questionText}</h1>
-
-                <div className="mt-8 grid gap-3">
-                  {question.answers.map((answer, index) => {
-                    const answerNumber = index + 1;
-                    const isCorrectAnswer = correctAnswer === answerNumber;
-                    const isSelected = selectedAnswer === answerNumber;
-                    const selectedWasCorrect = feedbackStatus === "revealed" && answerResult?.isCorrect && isSelected;
-                    const selectedWasWrong = feedbackStatus === "revealed" && answerResult && !answerResult.isCorrect && isSelected;
-
-                    let className = "border-slate-200 bg-white hover:bg-slate-50 hover:-translate-y-0.5";
-
-                    if (isSelected && feedbackStatus === "locked") {
-                      className = "border-amber-400 bg-amber-50";
-                    }
-
-                    if (selectedWasCorrect) {
-                      className = "border-green-600 bg-green-50 text-green-900";
-                    }
-
-                    if (selectedWasWrong) {
-                      className = "border-red-600 bg-red-50 text-red-900";
-                    }
-
-                    if (feedbackStatus === "revealed" && isCorrectAnswer) {
-                      className = "border-green-600 bg-green-50 text-green-900";
-                    }
-
-                    return (
-                      <button
-                        disabled={selectedAnswer !== null || feedbackStatus !== "idle"}
-                        key={`${answer}-${index}`}
-                        onClick={() => submitAnswer(answerNumber)}
-                        className={`rounded-2xl border-2 p-5 text-left font-bold shadow-sm transition ${className}`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-white">
-                            {answerNumber}
-                          </span>
-
-                          <span className="flex-1">{answer}</span>
-
-                          {isSelected && feedbackStatus === "locked" && <span className="text-2xl">🔒</span>}
-                          {selectedWasCorrect && <span className="text-2xl">✅</span>}
-                          {selectedWasWrong && <span className="text-2xl">❌</span>}
-                          {feedbackStatus === "revealed" && isCorrectAnswer && !isSelected && <span className="text-2xl">✅</span>}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {feedbackStatus === "locked" && (
-                  <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-6 text-center">
-                    <div className="text-4xl">🔒</div>
-                    <p className="mt-2 text-2xl font-black text-amber-800">Réponse verrouillée</p>
-                    <p className="mt-1 text-sm font-semibold text-amber-700">
-                      Attends la fin du timer pour voir la bonne réponse.
-                    </p>
-                  </div>
-                )}
-
-                {feedbackStatus === "revealed" && answerResult && (
-                  <div
-                    className={`mt-6 rounded-3xl p-6 text-center shadow-lg ${
-                      answerResult.isCorrect ? "bg-green-600 text-white" : "bg-red-600 text-white"
-                    }`}
-                  >
-                    <div className="text-6xl">{answerResult.isCorrect ? "✅" : answerResult.selectedAnswer === null ? "⏰" : "❌"}</div>
-                    <p className="mt-2 text-4xl font-black">
-                      {answerResult.isCorrect ? "CORRECT !" : answerResult.selectedAnswer === null ? "TEMPS ÉCOULÉ !" : "FAUX !"}
-                    </p>
-                    <p className="mt-2 text-2xl font-black">+{answerResult.points} points</p>
-                    <p className="mt-2 text-sm opacity-90">
-                      {answerResult.isCorrect ? "Bien joué, tu as marqué des points." : "La bonne réponse est maintenant affichée en vert."}
-                    </p>
-                  </div>
-                )}
-
-                {explanation && (
-                  <div className="mt-5 rounded-2xl bg-slate-100 p-5">
-                    <p className="text-sm font-black uppercase tracking-widest text-slate-500">Explication</p>
-                    <p className="mt-2 text-slate-700">{explanation}</p>
-                  </div>
-                )}
+            <div className="flex items-center gap-2">
+              <button onClick={toggleSound} className="rounded-2xl bg-slate-100 px-3 py-2 text-sm font-black text-slate-700">
+                {soundEnabled ? "🔊" : "🔇"}
+              </button>
+              <div className="rounded-2xl bg-slate-950 px-4 py-2 text-center text-white">
+                <p className="text-2xl font-black leading-none">{timeLeft}</p>
+                <p className="text-[10px] font-bold uppercase text-slate-300">sec</p>
               </div>
+            </div>
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
+            <section className="rounded-[2rem] bg-white p-4 shadow-xl ring-1 ring-slate-200 sm:p-6 md:p-8">
+              <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${progressPercent}%` }} />
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-2 text-xs font-black uppercase tracking-widest text-slate-500">
+                <span className="rounded-full bg-slate-100 px-3 py-1">{question.category}</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1">{question.difficulty}</span>
+              </div>
+
+              <h1 className="mt-4 text-2xl font-black leading-tight text-slate-950 sm:text-3xl md:text-4xl">{question.questionText}</h1>
+
+              {feedbackStatus !== "revealed" && (
+                <div className="mt-4 rounded-2xl bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800">
+                  {selectedAnswer ? "Réponse choisie. Tu peux encore changer avant la fin du timer." : "Choisis une réponse. Tu peux la modifier jusqu'à la fin du timer."}
+                </div>
+              )}
+
+              <div className="mt-5 grid gap-3">
+                {question.answers.map((answer, index) => {
+                  const answerNumber = index + 1;
+                  const isCorrectAnswer = correctAnswer === answerNumber;
+                  const isSelected = selectedAnswer === answerNumber;
+                  const selectedWasCorrect = feedbackStatus === "revealed" && answerResult?.isCorrect && isSelected;
+                  const selectedWasWrong = feedbackStatus === "revealed" && answerResult && !answerResult.isCorrect && isSelected;
+
+                  let className = "border-slate-200 bg-white hover:bg-slate-50 active:scale-[0.99]";
+
+                  if (isSelected && feedbackStatus !== "revealed") {
+                    className = "border-blue-600 bg-blue-50 text-blue-950 shadow-md";
+                  }
+
+                  if (selectedWasCorrect) {
+                    className = "border-green-600 bg-green-50 text-green-900";
+                  }
+
+                  if (selectedWasWrong) {
+                    className = "border-red-600 bg-red-50 text-red-900";
+                  }
+
+                  if (feedbackStatus === "revealed" && isCorrectAnswer) {
+                    className = "border-green-600 bg-green-50 text-green-900";
+                  }
+
+                  return (
+                    <button
+                      type="button"
+                      disabled={feedbackStatus === "revealed"}
+                      key={`${question.id}-${index}`}
+                      onClick={() => submitAnswer(answerNumber)}
+                      className={`min-h-16 rounded-2xl border-2 p-4 text-left font-bold shadow-sm transition sm:min-h-20 sm:p-5 ${className}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-sm font-black text-white">
+                          {answerLetter(answerNumber)}
+                        </span>
+
+                        <span className="flex-1 text-base sm:text-lg">{answer}</span>
+
+                        {isSelected && feedbackStatus !== "revealed" && <span className="text-2xl">✍️</span>}
+                        {selectedWasCorrect && <span className="text-2xl">✅</span>}
+                        {selectedWasWrong && <span className="text-2xl">❌</span>}
+                        {feedbackStatus === "revealed" && isCorrectAnswer && !isSelected && <span className="text-2xl">✅</span>}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {feedbackStatus === "revealed" && answerResult && (
+                <div
+                  className={`mt-6 rounded-3xl p-5 text-center shadow-lg sm:p-6 ${
+                    answerResult.isCorrect ? "bg-green-600 text-white" : "bg-red-600 text-white"
+                  }`}
+                >
+                  <div className="text-5xl sm:text-6xl">{answerResult.isCorrect ? "✅" : answerResult.selectedAnswer === null ? "⏰" : "❌"}</div>
+                  <p className="mt-2 text-3xl font-black sm:text-4xl">
+                    {answerResult.isCorrect ? "CORRECT !" : answerResult.selectedAnswer === null ? "TEMPS ÉCOULÉ !" : "FAUX !"}
+                  </p>
+                  <p className="mt-2 text-2xl font-black">+{answerResult.points} points</p>
+                  <p className="mt-2 text-sm opacity-90">
+                    {answerResult.isCorrect ? "Bien joué." : "La bonne réponse est affichée en vert."}
+                  </p>
+                </div>
+              )}
+
+              {explanation && feedbackStatus === "revealed" && (
+                <div className="mt-5 rounded-3xl bg-slate-100 p-5">
+                  <p className="text-sm font-black uppercase tracking-widest text-slate-500">Explication</p>
+                  <p className="mt-2 leading-7 text-slate-700">{explanation}</p>
+                </div>
+              )}
+
+              {error && <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 font-semibold text-red-700">{error}</p>}
             </section>
 
-            <aside className="rounded-[2rem] bg-slate-950 p-5 text-white shadow-xl">
+            <aside className="rounded-[2rem] bg-slate-950 p-4 text-white shadow-xl sm:p-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-black uppercase tracking-widest text-blue-300">Joueurs</p>
-                  <h2 className="text-2xl font-black">État des réponses</h2>
+                  <h2 className="text-xl font-black sm:text-2xl">État des réponses</h2>
                 </div>
                 <div className="rounded-2xl bg-white/10 px-3 py-2 text-sm font-black">
-                  {lockedCount}/{room.players.length}
+                  {answeredCount}/{room.players.length}
                 </div>
               </div>
 
               <div className="mt-4 space-y-3">
-                {room.players
-                  .slice()
-                  .sort((a, b) => b.score - a.score)
-                  .map((p) => {
-                    const status = statusLabel(p.currentAnswerStatus, p.currentAnswerPoints);
-                    return (
-                      <div key={p.id} className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
-                        <div className="flex items-center gap-3">
-                          <AvatarBubble avatar={p.avatarUrl} size="sm" />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate font-black">{p.username}</p>
-                            <p className="text-xs text-slate-300">{p.score} points</p>
-                          </div>
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-black ${status.className}`}>
-                            {status.icon} {status.text}
-                          </span>
+                {sortedPlayers.map((p) => {
+                  const status = statusLabel(p.currentAnswerStatus, p.currentAnswerPoints);
+                  return (
+                    <div key={p.id} className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
+                      <div className="flex items-center gap-3">
+                        <AvatarBubble avatar={p.avatarUrl} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-black">{p.username}</p>
+                          <p className="text-xs text-slate-300">{p.score} points</p>
                         </div>
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-black ${status.className}`}>
+                          {status.icon} {status.text}
+                        </span>
                       </div>
-                    );
-                  })}
+                    </div>
+                  );
+                })}
               </div>
 
-              <div className="mt-5 rounded-2xl bg-white/10 p-4 text-sm text-slate-300">
-                Les réponses restent secrètes jusqu'à la fin du timer. Le score est calculé au reveal.
+              <div className="mt-5 rounded-2xl bg-white/10 p-4 text-sm leading-6 text-slate-300">
+                Les réponses restent secrètes jusqu'à la fin. Tu peux changer ton choix tant que le timer tourne.
               </div>
             </aside>
           </div>
@@ -609,7 +742,7 @@ export function GameClient() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-slate-100 px-6 py-10">
+    <main className="min-h-[100dvh] bg-gradient-to-br from-blue-50 via-white to-slate-100 px-4 py-5 sm:px-6 sm:py-10">
       <section className="mx-auto max-w-5xl">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -617,60 +750,74 @@ export function GameClient() {
             <h1 className="mt-2 text-4xl font-black text-slate-950">Salle {room.roomCode}</h1>
           </div>
 
-          <span className="rounded-full bg-white px-5 py-3 text-sm font-black ring-1 ring-slate-200">
-            {room.players.length}/8 joueurs
-          </span>
+          <div className="flex items-center gap-2">
+            <button onClick={toggleSound} className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-700 ring-1 ring-slate-200">
+              {soundEnabled ? "🔊 Son" : "🔇 Muet"}
+            </button>
+            <span className="rounded-2xl bg-white px-4 py-3 text-sm font-black ring-1 ring-slate-200">{room.players.length}/8 joueurs</span>
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <p className="text-sm font-black uppercase tracking-widest text-slate-500">Code d'invitation</p>
+          <p className="mt-2 select-all text-center text-5xl font-black tracking-[0.2em] text-blue-700 sm:text-left">{room.roomCode}</p>
+          <p className="mt-2 text-sm text-slate-500">Partage ce code aux autres joueurs.</p>
         </div>
 
         <div className="mt-6 grid gap-3">
           {room.players.map((p) => (
-            <div key={p.id} className="flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-              <div className="flex items-center gap-3 font-black">
+            <div key={p.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+              <div className="flex min-w-0 items-center gap-3 font-black">
                 <AvatarBubble avatar={p.avatarUrl} />
-                <span>{p.username} {p.isHost && <span className="text-blue-700">· Host</span>}</span>
+                <span className="truncate">
+                  {p.username} {p.isHost && <span className="text-blue-700">· Host</span>}
+                </span>
               </div>
-              <div className={`rounded-full px-3 py-1 text-sm font-bold ${p.isReady ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"}`}>
+              <div className={`shrink-0 rounded-full px-3 py-1 text-sm font-bold ${p.isReady ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"}`}>
                 {p.isReady ? "Prêt" : "Pas prêt"}
               </div>
             </div>
           ))}
         </div>
 
-        <div className="mt-8 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+        <div className="mt-8 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:p-6">
           {isHost ? (
             <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
               <label className="grid gap-1 text-sm font-bold">
-                Timer
+                Timer par question
                 <input
                   type="number"
                   min={5}
                   max={60}
                   value={timerSeconds}
                   onChange={(e) => setTimerSeconds(Number(e.target.value))}
-                  className="rounded-xl border px-3 py-2"
+                  className="h-12 rounded-xl border px-3 py-2"
                 />
               </label>
 
               <label className="grid gap-1 text-sm font-bold">
-                Questions
+                Nombre de questions
                 <input
                   type="number"
                   min={1}
                   max={50}
                   value={questionCount}
                   onChange={(e) => setQuestionCount(Number(e.target.value))}
-                  className="rounded-xl border px-3 py-2"
+                  className="h-12 rounded-xl border px-3 py-2"
                 />
               </label>
 
-              <button onClick={startGame} className="self-end rounded-2xl bg-blue-700 px-6 py-3 font-black text-white shadow-lg shadow-blue-200 transition hover:bg-blue-800">
+              <button
+                onClick={startGame}
+                className="min-h-14 self-end rounded-2xl bg-blue-700 px-6 py-3 font-black text-white shadow-lg shadow-blue-200 transition active:scale-[0.98] hover:bg-blue-800"
+              >
                 Lancer
               </button>
             </div>
           ) : (
             <button
               onClick={() => setReady(!me?.isReady)}
-              className="rounded-2xl bg-blue-700 px-6 py-3 font-black text-white shadow-lg shadow-blue-200 transition hover:bg-blue-800"
+              className="min-h-14 w-full rounded-2xl bg-blue-700 px-6 py-3 font-black text-white shadow-lg shadow-blue-200 transition active:scale-[0.98] hover:bg-blue-800 sm:w-auto"
             >
               {me?.isReady ? "Annuler prêt" : "Je suis prêt"}
             </button>

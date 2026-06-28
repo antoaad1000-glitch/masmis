@@ -25,10 +25,30 @@ export type PlayerState = {
   currentAnswerPoints?: number;
 };
 
+export type PlayerQuestionResult = {
+  playerId: string;
+  selectedAnswer: number | null;
+  isCorrect: boolean;
+  points: number;
+  responseTimeMs: number;
+};
+
+export type ReviewQuestion = {
+  questionId: string;
+  questionText: string;
+  answers: string[];
+  correctAnswer: number;
+  category: string;
+  difficulty: Difficulty;
+  explanation?: string | null;
+  playerResults: PlayerQuestionResult[];
+};
+
 export type RoomState = {
   roomCode: string;
   status: "lobby" | "playing" | "finished";
   players: PlayerState[];
   currentQuestionIndex: number;
   totalQuestions: number;
+  review?: ReviewQuestion[];
 };

@@ -3,22 +3,21 @@ import http from "node:http";
 import crypto from "node:crypto";
 import { Server } from "socket.io";
 import { prisma } from "@masmis/db";
-import { calculateScore, type AnswerStatus, type PlayerState, type PublicQuestion } from "@masmis/shared";
+import {
+  calculateScore,
+  type AnswerStatus,
+  type PlayerQuestionResult,
+  type PlayerState,
+  type PublicQuestion,
+  type ReviewQuestion
+} from "@masmis/shared";
 
 type RoomPlayer = PlayerState & { socketId: string };
 
 type LoadedQuestion = Awaited<ReturnType<typeof loadQuestions>>[number];
 
-type LockedAnswer = {
+type SubmittedAnswer = {
   selectedAnswer: number;
-  responseTimeMs: number;
-};
-
-type PlayerRevealResult = {
-  playerId: string;
-  selectedAnswer: number | null;
-  isCorrect: boolean;
-  points: number;
   responseTimeMs: number;
 };
 
@@ -31,14 +30,16 @@ type Room = {
   currentQuestionIndex: number;
   timerSeconds: number;
   startedAtMs: number;
-  submittedAnswers: Map<string, Map<string, LockedAnswer>>;
+  submittedAnswers: Map<string, Map<string, SubmittedAnswer>>;
+  review: ReviewQuestion[];
 };
 
 const rooms = new Map<string, Room>();
 const port = Number(process.env.PORT ?? process.env.REALTIME_PORT ?? 4000);
 const corsOrigin = (process.env.CORS_ORIGIN ?? "http://localhost:3000")
   .split(",")
-  .map((origin) => origin.trim());
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 const server = http.createServer((req, res) => {
   if (req.url === "/health") {
@@ -46,6 +47,7 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ ok: true }));
     return;
   }
+
   res.writeHead(404);
   res.end();
 });
@@ -64,10 +66,12 @@ function makeRoomCode() {
 
 function shuffle<T>(items: T[]) {
   const copy = [...items];
+
   for (let i = copy.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
     [copy[i], copy[j]] = [copy[j], copy[i]];
   }
+
   return copy;
 }
 
@@ -107,7 +111,8 @@ function publicRoom(room: Room) {
       };
     }),
     currentQuestionIndex: room.currentQuestionIndex,
-    totalQuestions: room.questions.length
+    totalQuestions: room.questions.length,
+    review: room.review
   };
 }
 
@@ -134,13 +139,13 @@ function emitRoom(room: Room) {
 }
 
 function revealCurrentQuestion(room: Room, question: LoadedQuestion) {
-  const submitted = room.submittedAnswers.get(question.id) ?? new Map<string, LockedAnswer>();
-  const playerResults: PlayerRevealResult[] = [];
+  const submitted = room.submittedAnswers.get(question.id) ?? new Map<string, SubmittedAnswer>();
+  const playerResults: PlayerQuestionResult[] = [];
 
   for (const player of room.players.values()) {
-    const lockedAnswer = submitted.get(player.id);
-    const responseTimeMs = lockedAnswer?.responseTimeMs ?? room.timerSeconds * 1000;
-    const selectedAnswer = lockedAnswer?.selectedAnswer ?? null;
+    const submittedAnswer = submitted.get(player.id);
+    const responseTimeMs = submittedAnswer?.responseTimeMs ?? room.timerSeconds * 1000;
+    const selectedAnswer = submittedAnswer?.selectedAnswer ?? null;
     const isCorrect = selectedAnswer === question.correctAnswer;
     const points = calculateScore({ isCorrect, responseTimeMs, timerSeconds: room.timerSeconds });
 
@@ -162,11 +167,25 @@ function revealCurrentQuestion(room: Room, question: LoadedQuestion) {
     });
   }
 
+  const reviewItem: ReviewQuestion = {
+    questionId: question.id,
+    questionText: question.questionText,
+    answers: question.answers,
+    correctAnswer: question.correctAnswer,
+    category: question.category,
+    difficulty: question.difficulty,
+    explanation: question.explanation,
+    playerResults
+  };
+
+  room.review.push(reviewItem);
+
   io.to(room.roomCode).emit("question:reveal", {
     questionId: question.id,
     correctAnswer: question.correctAnswer,
     explanation: question.explanation,
-    playerResults
+    playerResults,
+    reviewItem
   });
 
   emitRoom(room);
@@ -174,6 +193,7 @@ function revealCurrentQuestion(room: Room, question: LoadedQuestion) {
 
 function emitCurrentQuestion(room: Room) {
   const q = room.questions[room.currentQuestionIndex];
+
   if (!q) {
     room.status = "finished";
     io.to(room.roomCode).emit("game:finished", publicRoom(room));
@@ -217,7 +237,7 @@ function emitCurrentQuestion(room: Room) {
       if (room.status !== "playing") return;
       room.currentQuestionIndex += 1;
       emitCurrentQuestion(room);
-    }, 3500);
+    }, 6000);
   }, room.timerSeconds * 1000);
 }
 
@@ -247,7 +267,8 @@ io.on("connection", (socket) => {
       currentQuestionIndex: 0,
       timerSeconds: 10,
       startedAtMs: 0,
-      submittedAnswers: new Map()
+      submittedAnswers: new Map(),
+      review: []
     };
 
     rooms.set(roomCode, room);
@@ -291,67 +312,85 @@ io.on("connection", (socket) => {
     emitRoom(room);
   });
 
-  socket.on("game:start", async ({ roomCode, playerId, timerSeconds, questionCount }: { roomCode: string; playerId: string; timerSeconds?: number; questionCount?: number }, callback) => {
-    const room = rooms.get(roomCode);
-    if (!room) return callback?.({ ok: false, error: "Room not found." });
-    if (room.hostPlayerId !== playerId) return callback?.({ ok: false, error: "Only host can start." });
-    if ([...room.players.values()].some((p) => !p.isHost && !p.isReady)) {
-      return callback?.({ ok: false, error: "All players must be ready." });
+  socket.on(
+    "game:start",
+    async (
+      { roomCode, playerId, timerSeconds, questionCount }: { roomCode: string; playerId: string; timerSeconds?: number; questionCount?: number },
+      callback
+    ) => {
+      const room = rooms.get(roomCode);
+      if (!room) return callback?.({ ok: false, error: "Room not found." });
+      if (room.hostPlayerId !== playerId) return callback?.({ ok: false, error: "Only host can start." });
+      if ([...room.players.values()].some((p) => !p.isHost && !p.isReady)) {
+        return callback?.({ ok: false, error: "All players must be ready." });
+      }
+
+      room.timerSeconds = Math.max(5, Math.min(60, timerSeconds ?? 10));
+      room.questions = await loadQuestions(Math.max(1, Math.min(50, questionCount ?? 10)));
+      if (room.questions.length === 0) return callback?.({ ok: false, error: "No approved questions available." });
+
+      room.status = "playing";
+      room.currentQuestionIndex = 0;
+      room.submittedAnswers = new Map();
+      room.review = [];
+
+      for (const player of room.players.values()) {
+        player.score = 0;
+        player.correctAnswers = 0;
+        player.totalAnswers = 0;
+        player.averageResponseTimeMs = 0;
+        player.currentAnswerStatus = "choosing";
+        player.currentAnswerPoints = undefined;
+      }
+
+      callback?.({ ok: true });
+      emitRoom(room);
+      emitCurrentQuestion(room);
     }
+  );
 
-    room.timerSeconds = Math.max(5, Math.min(60, timerSeconds ?? 10));
-    room.questions = await loadQuestions(Math.max(1, Math.min(50, questionCount ?? 10)));
-    if (room.questions.length === 0) return callback?.({ ok: false, error: "No approved questions available." });
+  socket.on(
+    "answer:submit",
+    (
+      { roomCode, playerId, questionId, selectedAnswer }: { roomCode: string; playerId: string; questionId: string; selectedAnswer: number },
+      callback
+    ) => {
+      const room = rooms.get(roomCode);
+      const player = room?.players.get(playerId);
+      const question = room?.questions[room.currentQuestionIndex];
 
-    room.status = "playing";
-    room.currentQuestionIndex = 0;
-    room.submittedAnswers = new Map();
+      if (!room || !player || !question || question.id !== questionId || room.status !== "playing") {
+        return callback?.({ ok: false, error: "Invalid answer submission." });
+      }
 
-    for (const player of room.players.values()) {
-      player.score = 0;
-      player.correctAnswers = 0;
-      player.totalAnswers = 0;
-      player.averageResponseTimeMs = 0;
-      player.currentAnswerStatus = "choosing";
+      if (!Number.isInteger(selectedAnswer) || selectedAnswer < 1 || selectedAnswer > 4) {
+        return callback?.({ ok: false, error: "Invalid answer." });
+      }
+
+      const submitted = room.submittedAnswers.get(questionId) ?? new Map<string, SubmittedAnswer>();
+      submitted.set(playerId, {
+        selectedAnswer,
+        responseTimeMs: Math.max(0, Date.now() - room.startedAtMs)
+      });
+      room.submittedAnswers.set(questionId, submitted);
+
+      player.currentAnswerStatus = "locked";
       player.currentAnswerPoints = undefined;
+
+      callback?.({ ok: true, selectedAnswer });
+      emitRoom(room);
     }
-
-    callback?.({ ok: true });
-    emitRoom(room);
-    emitCurrentQuestion(room);
-  });
-
-  socket.on("answer:submit", ({ roomCode, playerId, questionId, selectedAnswer }: { roomCode: string; playerId: string; questionId: string; selectedAnswer: number }, callback) => {
-    const room = rooms.get(roomCode);
-    const player = room?.players.get(playerId);
-    const question = room?.questions[room.currentQuestionIndex];
-    if (!room || !player || !question || question.id !== questionId || room.status !== "playing") {
-      return callback?.({ ok: false, error: "Invalid answer submission." });
-    }
-
-    const submitted = room.submittedAnswers.get(questionId) ?? new Map<string, LockedAnswer>();
-    if (submitted.has(playerId)) return callback?.({ ok: false, error: "Already answered." });
-
-    submitted.set(playerId, {
-      selectedAnswer,
-      responseTimeMs: Math.max(0, Date.now() - room.startedAtMs)
-    });
-    room.submittedAnswers.set(questionId, submitted);
-
-    player.currentAnswerStatus = "locked";
-    player.currentAnswerPoints = undefined;
-
-    callback?.({ ok: true, locked: true });
-    emitRoom(room);
-  });
+  );
 
   socket.on("disconnect", () => {
     for (const room of rooms.values()) {
       for (const [playerId, player] of room.players.entries()) {
         if (player.socketId === socket.id && room.status === "lobby") {
           room.players.delete(playerId);
-          if (room.players.size === 0) rooms.delete(room.roomCode);
-          else if (room.hostPlayerId === playerId) {
+
+          if (room.players.size === 0) {
+            rooms.delete(room.roomCode);
+          } else if (room.hostPlayerId === playerId) {
             const nextHost = room.players.values().next().value as RoomPlayer | undefined;
             if (nextHost) {
               nextHost.isHost = true;
@@ -359,6 +398,7 @@ io.on("connection", (socket) => {
               room.hostPlayerId = nextHost.id;
             }
           }
+
           emitRoom(room);
         }
       }
@@ -367,5 +407,5 @@ io.on("connection", (socket) => {
 });
 
 server.listen(port, () => {
-  console.log(`Masmis realtime server running on http://localhost:${port}`);
+  console.log(`Masmis realtime server running on port ${port}`);
 });

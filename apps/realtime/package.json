@@ -12,7 +12,7 @@
   "dependencies": {
     "@masmis/db": "workspace:*",
     "@masmis/shared": "workspace:*",
-    "@prisma/client": "^6.19.3",
+    "@prisma/client": "latest",
     "cors": "latest",
     "dotenv": "latest",
     "socket.io": "latest"

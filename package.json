@@ -20,8 +20,5 @@
   "devDependencies": {
     "tsx": "latest",
     "typescript": "latest"
-  },
-  "dependencies": {
-    "@masmis/db": "workspace:^"
   }
 }
